@@ -1,3 +1,3 @@
 # ansible-vault で暗号化して使用してください。
-vault_rke2_token: "d058b1498d2154b40df6beb40e1d6c877d81fa527cb1bc98372ff3d436556d97"
+vault_rke2_token: "K1035d1e35b13ec931aa503c1aaf766d068b7d88786a15fd3a151330f37b447c074::server:d6ed69e44cf63246a3d17b86f514c626"
 vault_rancher_bootstrap: "Admin#ChangeMe!"

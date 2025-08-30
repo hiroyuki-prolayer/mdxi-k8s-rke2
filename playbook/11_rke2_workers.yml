@@ -1,6 +1,36 @@
 ---
 - hosts: workers
   become: true
-  serial: 3
+  vars_files:
+    - ../group_vars/all.yml
+    - ../group_vars/vault.yml
+  serial: 5
+
+  pre_tasks:
+    # master から token を slurp（base64で入る）
+    - name: Read RKE2 server token from master
+      slurp:
+        src: /var/lib/rancher/rke2/server/token
+      register: server_token
+      delegate_to: mnode
+      run_once: true
+      become: true
+
+    - name: Set runtime token fact
+      set_fact:
+        rke2_token_runtime: "{{ server_token.content | b64decode | regex_replace('\\n$', '') }}"
+      run_once: true
+
+    - name: Ensure /etc/rancher/rke2 directory exists
+      file:
+        path: /etc/rancher/rke2
+        state: directory
+        mode: "0755"
+
   roles:
-    - { role: rke2_agent, tags: ["rke2","agent"] }
+    - role: rke2_agent
+      tags: ["rke2","agent"]
+      vars:
+        # ここでロールに渡す token を "常に master 由来" にする
+        rke2_token: "{{ rke2_token_runtime }}"
+
