@@ -1,4 +1,4 @@
-# rke2-stack (Ansible)
+# mdx I Kubernetes rke2-stack (Ansible)
 
 RKE2 + Cilium + Ingress-NGINX + cert-manager(LE) + Rancher + Harbor + kube-prometheus-stack を
 bastion から構築するためのリポジトリ。
