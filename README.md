@@ -18,11 +18,11 @@ ansible-galaxy collection install -r collections/requirements.yml
 # 0) 初期セットアップ（ホスト名・ベース設定・NTP）
 ansible-playbook playbook/00_bootstrap.yml
 
-# 1) kubeconfig 書き替え
-ansible-playbook -i inventory/hosts.ini playbook/09_fix_kubeconfig.yml
-
-# 2) master セットアップ
+# 1) master セットアップ
 ansible-playbook-i inventory/hosts.ini playbook/10_rke2_server.yml
+
+# 2) kubeconfig 書き替え
+ansible-playbook -i inventory/hosts.ini playbook/09_fix_kubeconfig.yml
 
 # 3) worker 参加
 ansible-playbook-i inventory/hosts.ini playbook/11_rke2_workers.yml
