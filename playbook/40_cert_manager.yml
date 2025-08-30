@@ -1,5 +1,25 @@
 ---
 - hosts: bastion
   gather_facts: false
+  vars_files:
+    - ../group_vars/all.yml
+    - ../group_vars/vault.yml
+
+  # ここで kubeconfig を自己完結的に解決
+  vars:
+    kubeconfig_path: "{{ lookup('env','KUBECONFIG') | default(playbook_dir | dirname ~ '/.kube/rke2.yaml', true) }}"
+    ingress_class: nginx
+
+  # k8s/helm モジュールに kubeconfig を自動適用
+  module_defaults:
+    kubernetes.core.helm:
+      kubeconfig: "{{ kubeconfig_path }}"
+    kubernetes.core.k8s:
+      kubeconfig: "{{ kubeconfig_path }}"
+
+  # 一部ツールが KUBECONFIG を参照するため環境変数も付与
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
+
   roles:
     - { role: cert_manager, tags: ["cert","letsencrypt"] }
