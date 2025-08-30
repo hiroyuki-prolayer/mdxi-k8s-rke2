@@ -1,4 +1,21 @@
 ---
+# 追加: helm-diff プラグインをインストール/更新（>= 3.4.1）
+- name: Ensure helm-diff plugin (>=3.4.1) is installed
+  shell: |
+    set -e
+    # 既に入っていれば update、無ければ install（install が失敗したら update にフォールバック）
+    helm plugin install https://github.com/databus23/helm-diff --version v3.9.9 || \
+    helm plugin update diff
+  args:
+    executable: /bin/bash
+  changed_when: false
+  register: helm_diff_result
+
+# 追加: 実際に有効化されたか軽く確認（任意）
+- name: Verify helm-diff is available
+  command: helm plugin list
+  register: helm_plugins
+  changed_when: false
 - name: Add ingress-nginx repo
   kubernetes.core.helm_repository:
     name: ingress-nginx

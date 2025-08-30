@@ -1,0 +1,14 @@
+---
+# Self-reference を避けるため、ここは素直にリテラル既定値を置く
+cluster_domain: "ip-163-220-178-192.compute.mdx1.jp"
+
+# ここも自己参照は使わず、cluster_domain から素直に合成
+rancher_fqdn: "rancher.{{ cluster_domain }}"
+le_email: "admin@{{ cluster_domain }}"
+
+# kubeconfig は環境変数があればそれを、なければリポジトリルート配下の .kube を使う
+kubeconfig_path: "{{ lookup('env','KUBECONFIG') | default(playbook_dir | dirname ~ '/.kube/rke2.yaml', true) }}"
+
+# 空文字なら Helm に渡さない（タスク側の when で制御）
+rancher_bootstrap_password: ""
+
