@@ -18,34 +18,37 @@ ansible-galaxy collection install -r collections/requirements.yml
 # 0) 初期セットアップ（ホスト名・ベース設定・NTP）
 ansible-playbook playbook/00_bootstrap.yml
 
-# 1) master セットアップ
-ansible-playbook playbook/10_rke2_server.yml
+# 1) kubeconfig 書き替え
+ansible-playbook -i inventory/hosts.ini playbook/09_fix_kubeconfig.yml
 
-# 2) worker 参加
-ansible-playbook playbook/11_rke2_workers.yml
+# 2) master セットアップ
+ansible-playbook-i inventory/hosts.ini playbook/10_rke2_server.yml
 
-# 3) Cilium 導入（bastion から）
-ansible-playbook playbook/20_cilium.yml
+# 3) worker 参加
+ansible-playbook-i inventory/hosts.ini playbook/11_rke2_workers.yml
 
-# 4) Ingress-NGINX 導入（ラベル付与込み）
-ansible-playbook playbook/30_ingress_nginx.yml
+# 4) Cilium 導入（bastion から）
+ansible-playbook-i inventory/hosts.ini playbook/20_cilium.yml
 
-# 5) cert-manager + ClusterIssuer
-ansible-playbook playbook/40_cert_manager.yml
+# 5) Ingress-NGINX 導入（ラベル付与込み）
+ansible-playbook-i inventory/hosts.ini playbook/30_ingress_nginx.yml
 
-# 6) Rancher
-ansible-playbook playbook/50_rancher.yml
+# 6) cert-manager + ClusterIssuer
+ansible-playbook-i inventory/hosts.ini playbook/40_cert_manager.yml
 
-# 7) Harbor
-ansible-playbook playbook/60_harbor.yml
+# 7) Rancher
+ansible-playbook-i inventory/hosts.ini playbook/50_rancher.yml
 
-# 8) Monitoring (Prometheus/Grafana/Alertmanager)
-ansible-playbook playbook/70_monitoring.yml
+# 8) Harbor
+ansible-playbook-i inventory/hosts.ini playbook/60_harbor.yml
+
+# 9) Monitoring (Prometheus/Grafana/Alertmanager)
+ansible-playbook-i inventory/hosts.ini playbook/70_monitoring.yml
 ```
 
 スケールアウト（wnode006..100 を inventory に追記後）:
 ```bash
-ansible-playbook playbook/scale-out-workers.yml
+ansible-playbook-i inventory/hosts.ini playbook/scale-out-workers.yml
 ```
 
 ## 変更すべき値
