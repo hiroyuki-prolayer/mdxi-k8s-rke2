@@ -12,6 +12,8 @@
     release_namespace: kube-system
     create_namespace: false
     kubeconfig: "{{ kubeconfig_path }}"
+    values_files:
+      - "{{ role_path }}/files/values-cilium.yaml"
     values:
       kubeProxyReplacement: "disabled"
       # v1.15以降は 'tunnel' キー廃止。必要なら tunnelProtocol を使う:

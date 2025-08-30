@@ -12,7 +12,7 @@
     create_namespace: true
     kubeconfig: "{{ kubeconfig_path }}"
     values_files:
-      - roles/ingress_nginx/files/values-ingress.yaml
+      - "{{ role_path }}/files/values-ingress.yaml"
     values:
       controller:
         ingressClassResource:
