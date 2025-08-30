@@ -8,8 +8,20 @@
   kubernetes.core.helm:
     name: cilium
     chart_ref: cilium/cilium
+    chart_version: "1.16.3"        # v1.16系に固定
     release_namespace: kube-system
     create_namespace: false
     kubeconfig: "{{ kubeconfig_path }}"
-    values_files:
-      - roles/cilium/files/values-cilium.yaml
+    values:
+      kubeProxyReplacement: "disabled"
+      # v1.15以降は 'tunnel' キー廃止。必要なら tunnelProtocol を使う:
+      # tunnelProtocol: "vxlan"
+      hubble:
+        enabled: true
+        relay:
+          enabled: true
+        ui:
+          enabled: false
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
+

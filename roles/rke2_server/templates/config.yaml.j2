@@ -5,3 +5,7 @@ disable:
 cni: none
 node-ip: {{ hostvars[inventory_hostname]['node_ip'] }}
 node-name: {{ inventory_hostname }}
+tls-san:
+  - 10.14.23.161        # mnode のIP（bastionからの到達先）
+  - mnode
+  - ip-163-220-178-192.compute.mdx1.jp

@@ -1,6 +1,45 @@
 ---
 - hosts: bastion
   gather_facts: false
-  roles:
-    - { role: helm_setup, tags: ["helm"] }
-    - { role: cilium, tags: ["cilium"] }
+
+  vars:
+    # レポ直下の .kube/rke2.yaml を指す
+    kubeconfig_path: "{{ playbook_dir | dirname }}/.kube/rke2.yaml"
+
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
+
+  tasks:
+    - name: Precheck | kubeconfig present
+      ansible.builtin.stat:
+        path: "{{ kubeconfig_path }}"
+      register: kc
+
+    - name: Fail if kubeconfig is missing
+      ansible.builtin.fail:
+        msg: "kubeconfig not found at {{ kubeconfig_path }}. Did you run 10_rke2_server.yml and fetch the file?"
+      when: not kc.stat.exists
+
+    - name: Add cilium repo
+      kubernetes.core.helm_repository:
+        name: cilium
+        repo_url: https://helm.cilium.io/
+
+    - name: Install/upgrade cilium
+      kubernetes.core.helm:
+        name: cilium
+        chart_ref: cilium/cilium
+        chart_version: "1.16.3"        # 安定版を明示
+        release_namespace: kube-system
+        create_namespace: false
+        kubeconfig: "{{ kubeconfig_path }}"
+        values:
+          kubeProxyReplacement: false   # v1.15+ は true/false が必須
+          tunnelProtocol: "vxlan"       # v1.15+ は tunnel → tunnelProtocol
+          hubble:
+            enabled: true
+            relay:
+              enabled: true
+            ui:
+              enabled: false
+

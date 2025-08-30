@@ -49,9 +49,29 @@
     timeout: 600
   become: true
 
-- name: Fetch kubeconfig to controller
+- name: Fetch kubeconfig to controller (repo ./.kube)
   fetch:
     src: /etc/rancher/rke2/rke2.yaml
-    dest: ../.kube/rke2.yaml
+    dest: "{{ playbook_dir | dirname }}/.kube/rke2.yaml"
     flat: true
   become: true
+
+- name: Patch kubeconfig server to master IP (local)
+  delegate_to: localhost
+  run_once: true
+  vars:
+    kubeconfig_local: "{{ playbook_dir | dirname }}/.kube/rke2.yaml"
+  lineinfile:
+    path: "{{ kubeconfig_local }}"
+    regexp: '^\\s*server:\\s*https?://.*:6443'
+    line: "    server: https://{{ hostvars['mnode']['node_ip'] }}:6443"
+
+# 取得済み ~/.kube/rke2.yaml の server を master IP に書き換え
+- name: Rewrite server endpoint in fetched kubeconfig (controller)
+  delegate_to: localhost
+  become: false
+  replace:
+    path: "{{ playbook_dir | dirname }}/.kube/rke2.yaml"
+    regexp: '^(\\s*server: )https://127\\.0\\.0\\.1:6443$'
+    replace: '\\1https://{{ hostvars["mnode"]["node_ip"] }}:6443'
+

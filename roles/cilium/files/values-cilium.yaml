@@ -1,10 +1,15 @@
 kubeProxyReplacement: "disabled"
 tunnel: "vxlan"
-containerRuntime:
-  integration: containerd
+
+# v1.16 では containerRuntime.integration は削除済み。自動検出に任せる。
+# containerRuntime:
+#   integration: containerd
+
 hubble:
   enabled: true
   relay:
     enabled: true
+  # UIは別チャートに分離傾向。まずは無効化で安定を優先。
   ui:
-    enabled: true
+    enabled: false
+
