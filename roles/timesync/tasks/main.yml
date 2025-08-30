@@ -31,9 +31,3 @@
     enabled: true
   become: true
 
-# Handlers
-- name: Restart chrony
-  service:
-    name: chrony
-    state: restarted
-  become: true

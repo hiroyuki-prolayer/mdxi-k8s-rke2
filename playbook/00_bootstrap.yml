@@ -2,6 +2,8 @@
 - hosts: masters:workers
   become: true
   gather_facts: true
+  vars_files:
+    - ../group_vars/all.yml
   roles:
     - { role: hostname, tags: ["hostname"] }
     - { role: common, tags: ["common"] }

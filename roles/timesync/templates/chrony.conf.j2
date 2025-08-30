@@ -2,12 +2,13 @@
 driftfile /var/lib/chrony/chrony.drift
 makestep 1.0 3
 rtcsync
-keys /etc/chrony/chrony.keys
 
 {% for s in time_servers %}
 pool {{ s }} iburst
 {% endfor %}
 
 # Access control (adjust as needed)
-allow 0.0.0.0/0
+# クライアント専用なら allow は不要。NTP配布サーバにするならネットワークを限定して有効化。
+# allow 10.0.0.0/8
 logdir /var/log/chrony
+
