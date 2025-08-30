@@ -1,0 +1,5 @@
+---
+- hosts: masters
+  become: true
+  roles:
+    - { role: rke2_server, tags: ["rke2","server"] }

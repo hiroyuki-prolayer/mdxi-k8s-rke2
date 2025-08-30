@@ -1,0 +1,6 @@
+---
+- hosts: new_workers
+  become: true
+  serial: 20
+  roles:
+    - { role: rke2_agent, tags: ["rke2","agent"] }

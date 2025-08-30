@@ -1,0 +1,33 @@
+---
+- name: Create cattle-system namespace
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: cattle-system
+
+- name: Add rancher repo
+  kubernetes.core.helm_repository:
+    name: rancher-latest
+    repo_url: https://releases.rancher.com/server-charts/latest
+
+- name: Install/upgrade rancher
+  kubernetes.core.helm:
+    name: rancher
+    chart_ref: rancher-latest/rancher
+    release_namespace: cattle-system
+    create_namespace: false
+    kubeconfig: "{{ kubeconfig_path }}"
+    values:
+      hostname: "rancher.ip-163-220-178-192.compute.mdx1.jp"
+      ingress:
+        tls:
+          source: letsEncrypt
+      letsEncrypt:
+        email: "admin@ip-163-220-178-192.compute.mdx1.jp"
+        environment: production
+      replicas: 1
+      bootstrapPassword: "{{ rancher_bootstrap_password }}"

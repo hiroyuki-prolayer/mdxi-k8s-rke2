@@ -1,0 +1,7 @@
+write-kubeconfig-mode: "0644"
+disable:
+  - rke2-canal
+  - rke2-ingress-nginx
+cni: none
+node-ip: {{ hostvars[inventory_hostname]['node_ip'] }}
+node-name: {{ inventory_hostname }}

@@ -1,0 +1,8 @@
+---
+- hosts: masters:workers
+  become: true
+  gather_facts: true
+  roles:
+    - { role: hostname, tags: ["hostname"] }
+    - { role: common, tags: ["common"] }
+    - { role: timesync, tags: ["timesync","ntp","chrony"] }

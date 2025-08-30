@@ -1,0 +1,20 @@
+---
+- name: Install RKE2 agent
+  shell: |
+    curl -sfL https://get.rke2.io | INSTALL_RKE2_CHANNEL={{ rke2_channel }} sh -
+  args:
+    creates: /usr/local/bin/rke2
+  become: true
+
+- name: Place agent config
+  template:
+    src: config.yaml.j2
+    dest: /etc/rancher/rke2/config.yaml
+  become: true
+
+- name: Enable & start rke2-agent
+  systemd:
+    name: rke2-agent
+    enabled: true
+    state: started
+  become: true

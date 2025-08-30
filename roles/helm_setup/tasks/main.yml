@@ -1,0 +1,19 @@
+---
+- name: Download helm
+  get_url:
+    url: https://get.helm.sh/helm-{{ helm_version }}-linux-amd64.tar.gz
+    dest: /tmp/helm.tgz
+
+- name: Install helm
+  unarchive:
+    src: /tmp/helm.tgz
+    dest: /usr/local
+    remote_src: true
+  become: true
+
+- name: Symlink helm
+  file:
+    src: /usr/local/linux-amd64/helm
+    dest: /usr/local/bin/helm
+    state: link
+  become: true

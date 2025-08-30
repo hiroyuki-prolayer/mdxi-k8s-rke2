@@ -1,0 +1,36 @@
+cluster_name: rke2-mdx1
+cluster_domain: ip-163-220-178-192.compute.mdx1.jp
+
+# FQDN（DNS で 80/443 を ingress ノードに向ける）
+rancher_fqdn: rancher.ip-163-220-178-192.compute.mdx1.jp
+harbor_fqdn: harbor.ip-163-220-178-192.compute.mdx1.jp
+grafana_fqdn: grafana.ip-163-220-178-192.compute.mdx1.jp
+prometheus_fqdn: prometheus.ip-163-220-178-192.compute.mdx1.jp
+alert_fqdn: alert.ip-163-220-178-192.compute.mdx1.jp
+
+# Let’s Encrypt
+le_email: admin@ip-163-220-178-192.compute.mdx1.jp
+
+# RKE2
+rke2_channel: "stable"
+rke2_server_ip: "{{ hostvars['mnode']['node_ip'] }}"
+rke2_token: "{{ vault_rke2_token }}"
+
+# Helm
+helm_version: "v3.15.3"
+
+# Ingress
+ingress_class: nginx
+use_hostport: true
+
+# Rancher 初期パスワード（初回ログイン後に変更）
+rancher_bootstrap_password: "{{ vault_rancher_bootstrap }}"
+
+# Kubeconfig（playbook/ から見て 1 つ上）
+kubeconfig_path: "{{ playbook_dir | dirname }}/.kube/rke2.yaml"
+
+# NTP/Chrony サーバー
+time_servers:
+  - ntp.nict.jp
+  - ntp.jst.mfeed.ad.jp
+  - pool.ntp.org

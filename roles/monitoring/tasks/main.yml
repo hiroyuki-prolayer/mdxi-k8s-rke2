@@ -1,0 +1,15 @@
+---
+- name: Add prometheus-community repo
+  kubernetes.core.helm_repository:
+    name: prometheus-community
+    repo_url: https://prometheus-community.github.io/helm-charts
+
+- name: Install/upgrade kube-prometheus-stack
+  kubernetes.core.helm:
+    name: kps
+    chart_ref: prometheus-community/kube-prometheus-stack
+    release_namespace: monitoring
+    create_namespace: true
+    kubeconfig: "{{ kubeconfig_path }}"
+    values_files:
+      - roles/monitoring/files/values-kps.yaml

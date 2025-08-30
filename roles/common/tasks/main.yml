@@ -1,0 +1,37 @@
+---
+# ベースOSチューニング（swap無効, 基本パッケージ, sysctl）
+- name: Disable swap immediately
+  command: swapoff -a
+  when: ansible_swaptotal_mb | int > 0
+  changed_when: false
+
+- name: Ensure swap entries are commented in /etc/fstab
+  replace:
+    path: /etc/fstab
+    regexp: '^([^#].*\s+swap\s+)'
+    replace: '# \1'
+
+- name: Install base packages
+  apt:
+    name:
+      - curl
+      - jq
+      - apt-transport-https
+      - ca-certificates
+      - gnupg
+    state: present
+    update_cache: true
+  become: true
+
+- name: Write sysctl for Kubernetes
+  copy:
+    dest: /etc/sysctl.d/99-k8s.conf
+    content: |
+      net.bridge.bridge-nf-call-iptables=1
+      net.ipv4.ip_forward=1
+  notify: Reload sysctl
+  become: true
+
+- name: Reload sysctl
+  command: sysctl --system
+  become: true

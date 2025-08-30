@@ -1,0 +1,4 @@
+server: https://{{ rke2_server_ip }}:9345
+token: {{ rke2_token }}
+node-ip: {{ hostvars[inventory_hostname]['node_ip'] }}
+node-name: {{ inventory_hostname }}

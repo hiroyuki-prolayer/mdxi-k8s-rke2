@@ -1,0 +1,13 @@
+---
+- name: Set hostname to inventory_hostname
+  command: hostnamectl set-hostname {{ inventory_hostname }}
+  become: true
+
+- name: Deploy /etc/hosts
+  template:
+    src: hosts.j2
+    dest: /etc/hosts
+    owner: root
+    group: root
+    mode: "0644"
+  become: true

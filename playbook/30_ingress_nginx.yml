@@ -1,0 +1,6 @@
+---
+- hosts: bastion
+  gather_facts: false
+  roles:
+    - { role: kube_labels, tags: ["labels","ingress"] }
+    - { role: ingress_nginx, tags: ["ingress"] }

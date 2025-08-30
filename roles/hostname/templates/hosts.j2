@@ -1,0 +1,8 @@
+# /etc/hosts managed by Ansible
+127.0.0.1   localhost
+::1         localhost ip6-localhost ip6-loopback
+127.0.1.1   {{ inventory_hostname }}
+
+{% for h in (groups['masters'] | default([])) + (groups['workers'] | default([])) %}
+{{ hostvars[h]['node_ip'] }} {{ h }} {{ h }}.{{ cluster_domain }}
+{% endfor %}

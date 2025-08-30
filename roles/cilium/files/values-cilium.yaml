@@ -1,0 +1,10 @@
+kubeProxyReplacement: "disabled"
+tunnel: "vxlan"
+containerRuntime:
+  integration: containerd
+hubble:
+  enabled: true
+  relay:
+    enabled: true
+  ui:
+    enabled: true

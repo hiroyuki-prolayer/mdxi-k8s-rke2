@@ -1,0 +1,28 @@
+expose:
+  type: ingress
+  tls:
+    enabled: true
+  ingress:
+    className: nginx
+    hosts:
+      core: harbor.ip-163-220-178-192.compute.mdx1.jp
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+      acme.cert-manager.io/http01-edit-in-place: "true"
+persistence:
+  enabled: true
+  resourcePolicy: "keep"
+  persistentVolumeClaim:
+    registry:
+      size: 100Gi
+    database:
+      size: 10Gi
+    trivy:
+      size: 5Gi
+    redis:
+      size: 1Gi
+    chartmuseum:
+      size: 5Gi
+externalURL: https://harbor.ip-163-220-178-192.compute.mdx1.jp
+
+harborAdminPassword: "ChangeMe#Harbor1"

@@ -1,0 +1,5 @@
+---
+- hosts: bastion
+  gather_facts: false
+  roles:
+    - { role: monitoring, tags: ["monitoring","prometheus","grafana"] }

@@ -1,0 +1,13 @@
+---
+- name: Label ingress nodes
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Node
+      metadata:
+        name: "{{ item }}"
+        labels:
+          ingress: "enabled"
+  loop: "{{ groups['ingress_nodes'] | default([]) }}"

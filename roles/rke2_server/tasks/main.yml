@@ -1,0 +1,40 @@
+---
+- name: Install RKE2 server
+  shell: |
+    curl -sfL https://get.rke2.io | INSTALL_RKE2_CHANNEL={{ rke2_channel }} sh -
+  args:
+    creates: /usr/local/bin/rke2
+  become: true
+
+- name: Place server config
+  template:
+    src: config.yaml.j2
+    dest: /etc/rancher/rke2/config.yaml
+  become: true
+
+- name: Create token file
+  copy:
+    dest: /var/lib/rancher/rke2/server/token
+    content: "{{ rke2_token }}\n"
+    mode: "0600"
+  become: true
+
+- name: Enable & start rke2-server
+  systemd:
+    name: rke2-server
+    enabled: true
+    state: started
+  become: true
+
+- name: Wait kubeconfig present
+  wait_for:
+    path: /etc/rancher/rke2/rke2.yaml
+    timeout: 600
+  become: true
+
+- name: Fetch kubeconfig to controller
+  fetch:
+    src: /etc/rancher/rke2/rke2.yaml
+    dest: ../.kube/rke2.yaml
+    flat: true
+  become: true

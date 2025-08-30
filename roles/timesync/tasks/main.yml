@@ -1,0 +1,39 @@
+---
+- name: Install chrony
+  apt:
+    name: chrony
+    state: present
+    update_cache: true
+  become: true
+
+- name: Disable systemd-timesyncd if present
+  service:
+    name: systemd-timesyncd
+    state: stopped
+    enabled: false
+  ignore_errors: true
+  become: true
+
+- name: Deploy chrony.conf
+  template:
+    src: chrony.conf.j2
+    dest: /etc/chrony/chrony.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart chrony
+  become: true
+
+- name: Ensure chrony started and enabled
+  service:
+    name: chrony
+    state: started
+    enabled: true
+  become: true
+
+# Handlers
+- name: Restart chrony
+  service:
+    name: chrony
+    state: restarted
+  become: true

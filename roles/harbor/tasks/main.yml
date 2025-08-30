@@ -1,0 +1,15 @@
+---
+- name: Add goharbor repo
+  kubernetes.core.helm_repository:
+    name: harbor
+    repo_url: https://helm.goharbor.io
+
+- name: Install/upgrade harbor
+  kubernetes.core.helm:
+    name: harbor
+    chart_ref: harbor/harbor
+    release_namespace: harbor
+    create_namespace: true
+    kubeconfig: "{{ kubeconfig_path }}"
+    values_files:
+      - roles/harbor/files/values-harbor.yaml
