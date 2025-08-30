@@ -6,6 +6,23 @@
     creates: /usr/local/bin/rke2
   become: true
 
+- name: Ensure RKE2 config dir exists
+  file:
+    path: /etc/rancher/rke2
+    state: directory
+    mode: "0755"
+  become: true
+
+- name: Ensure RKE2 server data dir (token) exists
+  file:
+    path: /var/lib/rancher/rke2/server
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+    recurse: true
+  become: true
+
 - name: Place server config
   template:
     src: config.yaml.j2
