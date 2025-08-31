@@ -1,5 +1,8 @@
 ---
 - hosts: bastion
   gather_facts: false
+  vars_files:
+    - ../group_vars/all.yml
+    - ../group_vars/values.yml
   roles:
     - { role: monitoring, tags: ["monitoring","prometheus","grafana"] }

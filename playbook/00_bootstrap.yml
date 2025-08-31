@@ -4,6 +4,7 @@
   gather_facts: true
   vars_files:
     - ../group_vars/all.yml
+    - ../group_vars/values.yml
   roles:
     - { role: hostname, tags: ["hostname"] }
     - { role: common, tags: ["common"] }
