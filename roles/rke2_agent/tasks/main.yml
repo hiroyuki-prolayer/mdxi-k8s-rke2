@@ -1,10 +1,10 @@
 ---
-- name: Install RKE2 agent
-  shell: |
-    curl -sfL https://get.rke2.io | INSTALL_RKE2_CHANNEL={{ rke2_channel }} sh -
-  args:
-    creates: /usr/local/bin/rke2
+# 1) 事前前提
+- name: Ensure br_netfilter is loaded
+  ansible.builtin.command: modprobe br_netfilter
   become: true
+  ignore_errors: true
+  changed_when: false
 
 - name: Ensure /etc/rancher/rke2 exists
   file:
@@ -15,15 +15,129 @@
     mode: "0755"
   become: true
 
-- name: Place agent config
+# 2) 設定（常に最新を書き戻す：token/サーバIP/ノードIP）
+- name: Place agent config (server ip / token / node-ip)
   template:
     src: config.yaml.j2
     dest: /etc/rancher/rke2/config.yaml
+    mode: "0644"
+  become: true
+  notify: restart rke2-agent
+
+# 3) インストール（初回のみ）
+- name: Install RKE2 agent (idempotent)
+  shell: |
+    curl -sfL https://get.rke2.io | INSTALL_RKE2_CHANNEL={{ rke2_channel }} sh -
+  args:
+    creates: /usr/local/bin/rke2
   become: true
 
+# 5) 起動
 - name: Enable & start rke2-agent
   systemd:
     name: rke2-agent
     enabled: true
     state: started
   become: true
+
+# 6) Node 登録待ち
+- name: Assert kubeconfig exists on localhost
+  delegate_to: localhost
+  ansible.builtin.stat:
+    path: "{{ kubeconfig_path }}"
+  register: kc
+
+- name: Wait node object appears (registered)
+  delegate_to: localhost
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ kubeconfig_path }}"
+    api_version: v1
+    kind: Node
+    name: "{{ inventory_hostname }}"
+  register: node_info
+  failed_when: false               # 一時的エラーでも失敗にしない
+  retries: 3
+  delay: 10
+  until: (node_info.resources | default([])) | length > 0
+
+# (=) まず InternalIP から実ノード名を特定する（first pass）
+- name: Discover node name by InternalIP (run on mnode - first pass)
+  delegate_to: mnode
+  become: true
+  vars:
+    _kubectl: /var/lib/rancher/rke2/bin/kubectl
+    _kubeconfig: /etc/rancher/rke2/rke2.yaml
+    _ip: "{{ hostvars[inventory_hostname].ansible_host
+             | default(hostvars[inventory_hostname].ip
+             | default(hostvars[inventory_hostname].internal_ip)) }}"
+  shell: |
+    "{{ _kubectl }}" --kubeconfig "{{ _kubeconfig }}" get nodes -o json \
+    | jq -r --arg ip "{{ _ip }}" '.items[]
+      | select(.status.addresses[]? | select(.type=="InternalIP" and .address==$ip))
+      | .metadata.name' \
+    | head -n1
+  args:
+    executable: /bin/bash
+  register: discovered_nodename
+  retries: 18
+  delay: 10
+  until: discovered_nodename.stdout | length > 0
+  changed_when: false
+
+# (=) 見つかったノード名を安全に正規化（未定義OK）
+- name: Normalize discovered node vars (safe) (first pass)
+  ansible.builtin.set_fact:
+    _disc_name: "{{ vars.get('discovered_node_name', '') | string | trim }}"
+    _disc_stdout: "{{ (discovered_nodename.stdout | default('')) | string | trim }}"
+
+# (=) 見つかったノード名を、このホスト用の事実として保持（安全な一時変数のみ使用）
+- name: Set effective rke2 node name for this host (first pass)
+  ansible.builtin.set_fact:
+    rke2_node_name: >-
+      {{ _disc_name
+         or _disc_stdout
+         or (hostvars[inventory_hostname].get('ansible_hostname','') | string | trim)
+         or inventory_hostname }}
+
+# D) node-ip の実IPと inventory の不一致を検出 → config を再生成して再起動
+- name: Detect primary IPv4 on worker
+  shell: "ip -4 -o addr show scope global | awk '{print $4}' | cut -d/ -f1 | head -n1"
+  register: primary_ip
+  changed_when: false
+
+- name: Fix node-ip mismatch by rewriting config and restarting
+  when: primary_ip.stdout is defined and primary_ip.stdout != hostvars[inventory_hostname]['node_ip']
+  block:
+    - name: Rewrite agent config with detected primary IP
+      template:
+        src: config.yaml.j2
+        dest: /etc/rancher/rke2/config.yaml
+      vars:
+        # 上書き用に node_ip を差し替え
+        hostvars_override:
+          node_ip: "{{ primary_ip.stdout }}"
+      become: true
+    - name: Restart rke2-agent (node-ip mismatch fix)
+      systemd:
+        name: rke2-agent
+        state: restarted
+      become: true
+    - name: Wait for node Ready after node-ip fix
+      delegate_to: localhost
+      shell: >
+        kubectl --kubeconfig {{ kubeconfig_path }}
+        get node {{ inventory_hostname }}
+        -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}'
+      register: ready_after_ipfix
+      changed_when: false
+      retries: 18
+      delay: 10
+      until: "'True' in ready_after_ipfix.stdout"
+
+- name: Start rke2-agent
+  become: true
+  ansible.builtin.service:
+    name: rke2-agent
+    state: started
+    enabled: true
+

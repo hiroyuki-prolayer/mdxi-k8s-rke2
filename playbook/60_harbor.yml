@@ -1,5 +1,28 @@
 ---
 - hosts: bastion
   gather_facts: false
-  roles:
-    - { role: harbor, tags: ["harbor"] }
+  vars:
+    kubeconfig_path: "{{ lookup('env','KUBECONFIG') | default(playbook_dir | dirname ~ '/.kube/rke2.yaml', true) }}"
+    harbor_values_file: "{{ playbook_dir | dirname }}/roles/harbor/files/values-harbor.yaml"
+  module_defaults:
+    kubernetes.core.helm:
+      kubeconfig: "{{ kubeconfig_path }}"
+    kubernetes.core.k8s:
+      kubeconfig: "{{ kubeconfig_path }}"
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
+  tasks:
+    - name: Add goharbor repo
+      kubernetes.core.helm_repository:
+        name: harbor
+        repo_url: https://helm.goharbor.io
+
+    - name: Install/upgrade harbor
+      kubernetes.core.helm:
+        name: harbor
+        chart_ref: harbor/harbor
+        release_namespace: harbor
+        create_namespace: true
+        values_files:
+          - "{{ harbor_values_file }}"
+

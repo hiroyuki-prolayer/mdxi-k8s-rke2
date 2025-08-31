@@ -1,3 +1,9 @@
 ---
 rke2_channel: "stable"
 
+# kubectl のコマンド（PATHにあるなら単に kubectl でOK）
+kubectl: "kubectl"
+
+# KUBECONFIG の既定値：環境変数があればそれ、無ければ repo の .kube/rke2.yaml を使う例
+kubeconfig_path: "{{ lookup('env','KUBECONFIG') | default(playbook_dir + '/../.kube/rke2.yaml', true) }}"
+

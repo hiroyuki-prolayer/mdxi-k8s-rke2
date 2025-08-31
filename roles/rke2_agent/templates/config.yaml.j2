@@ -1,4 +1,5 @@
 server: https://{{ rke2_server_ip }}:9345
 token: {{ rke2_token }}
-node-ip: {{ hostvars[inventory_hostname]['node_ip'] }}
+node-ip: {{ (hostvars_override.node_ip if (hostvars_override is defined and hostvars_override.node_ip is defined) else hostvars[inventory_hostname]['node_ip']) }}
 node-name: {{ inventory_hostname }}
+
