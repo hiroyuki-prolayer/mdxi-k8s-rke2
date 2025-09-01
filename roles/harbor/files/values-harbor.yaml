@@ -15,19 +15,19 @@ persistence:
   persistentVolumeClaim:
     registry:
       size: 100Gi
-      storageClass: local-path
+      storageClass: local-path-wffc
     database:
       size: 10Gi
-      storageClass: local-path
+      storageClass: local-path-wffc
     trivy:
       size: 5Gi
-      storageClass: local-path
+      storageClass: local-path-wffc
     redis:
       size: 1Gi
-      storageClass: local-path
+      storageClass: local-path-wffc
     chartmuseum:
       size: 5Gi
-      storageClass: local-path
+      storageClass: local-path-wffc
 externalURL: https://harbor.ip-163-220-178-192.compute.mdx1.jp
 
 harborAdminPassword: "ChangeMe#Harbor1"

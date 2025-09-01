@@ -1,25 +1,14 @@
 ---
 - hosts: bastion
   gather_facts: false
+  vars_files:
+    - ../group_vars/all.yml
+    - ../group_vars/values.yml
 
   vars:
-    # レポ直下の .kube/rke2.yaml を指す
     kubeconfig_path: "{{ playbook_dir | dirname }}/.kube/rke2.yaml"
-
-  environment:
-    KUBECONFIG: "{{ kubeconfig_path }}"
-
+    cilium_values_file: "{{ playbook_dir | dirname }}/roles/cilium/files/values-cilium.yaml" 
   tasks:
-    - name: Precheck | kubeconfig present
-      ansible.builtin.stat:
-        path: "{{ kubeconfig_path }}"
-      register: kc
-
-    - name: Fail if kubeconfig is missing
-      ansible.builtin.fail:
-        msg: "kubeconfig not found at {{ kubeconfig_path }}. Did you run 10_rke2_server.yml and fetch the file?"
-      when: not kc.stat.exists
-
     - name: Add cilium repo
       kubernetes.core.helm_repository:
         name: cilium
@@ -29,17 +18,39 @@
       kubernetes.core.helm:
         name: cilium
         chart_ref: cilium/cilium
-        chart_version: "1.16.3"        # 安定版を明示
+        chart_version: "1.16.3"        
         release_namespace: kube-system
         create_namespace: false
         kubeconfig: "{{ kubeconfig_path }}"
-        values:
-          kubeProxyReplacement: false   # v1.15+ は true/false が必須
-          tunnelProtocol: "vxlan"       # v1.15+ は tunnel → tunnelProtocol
-          hubble:
-            enabled: true
-            relay:
-              enabled: true
-            ui:
-              enabled: false
+        reset_values: true
+        atomic: true
+        values_files:
+          - "{{ cilium_values_file }}"
 
+    - name: Render cilium-config override
+      ansible.builtin.template:
+        src: "{{ playbook_dir | dirname }}/roles/cilium/templates/cilium-config.override.yaml.j2"
+        dest: "/tmp/cilium-config.override.yaml"
+
+    - name: Apply cilium-config (force override)
+      kubernetes.core.k8s:
+        kubeconfig: "{{ kubeconfig_path }}"
+        state: present
+        force: true
+        src: "/tmp/cilium-config.override.yaml"
+
+    - name: Restart cilium to reload config
+      kubernetes.core.k8s:
+        kubeconfig: "{{ kubeconfig_path }}"
+        state: patched
+        definition:
+          apiVersion: apps/v1
+          kind: DaemonSet
+          metadata:
+            name: cilium
+            namespace: kube-system
+          spec:
+            template:
+              metadata:
+                annotations:
+                  reload-at: "{{ lookup('ansible.builtin.pipe','date +%s') }}"

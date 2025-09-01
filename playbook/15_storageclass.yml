@@ -2,7 +2,7 @@
 - hosts: bastion
   vars_files:
     - ../group_vars/all.yml
-    - ../group_vars/values.yml
+    - ../group_vars/vault.yml
   gather_facts: false
   roles:
     - { role: storage_localpath, tags: ["storageclass","localpath"] }

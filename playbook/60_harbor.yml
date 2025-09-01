@@ -1,6 +1,9 @@
 ---
 - hosts: bastion
   gather_facts: false
+  vars_files:
+    - ../group_vars/all.yml
+    - ../group_vars/values.yml
   vars:
     kubeconfig_path: "{{ lookup('env','KUBECONFIG') | default(playbook_dir | dirname ~ '/.kube/rke2.yaml', true) }}"
     harbor_values_file: "{{ playbook_dir | dirname }}/roles/harbor/files/values-harbor.yaml"

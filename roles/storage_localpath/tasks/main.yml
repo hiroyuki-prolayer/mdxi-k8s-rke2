@@ -1,5 +1,5 @@
 ---
-- name: Ensure 'local-path' StorageClass is default (annotate via k8s module)
+- name: Create WFFC local-path StorageClass (new name)
   kubernetes.core.k8s:
     kubeconfig: "{{ kubeconfig_path }}"
     state: present
@@ -7,7 +7,23 @@
       apiVersion: storage.k8s.io/v1
       kind: StorageClass
       metadata:
-        name: local-path
+        name: local-path-wffc
         annotations:
           storageclass.kubernetes.io/is-default-class: "true"
+      provisioner: rancher.io/local-path
+      reclaimPolicy: Delete
+      volumeBindingMode: WaitForFirstConsumer
+
+- name: Remove default annotation from old local-path (if exists)
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: patched
+    kind: StorageClass
+    api_version: storage.k8s.io/v1
+    name: local-path
+    definition:
+      metadata:
+        annotations:
+          storageclass.kubernetes.io/is-default-class: null
+  ignore_errors: true
 

@@ -19,12 +19,21 @@ rke2_token: "{{ vault_rke2_token }}"
 # Helm
 helm_version: "v3.15.3"
 
+# Cilium
+enableHostPort: true
+hostServices_enabled: true
+routingMode: tunnel
+kubeProxyReplacement: false
+
 # Ingress
 ingress_class: nginx
 use_hostport: true
 
 # Rancher 初期パスワード（初回ログイン後に変更）
 rancher_bootstrap_password: "{{ vault_rancher_bootstrap }}"
+
+# harbor
+harbor_reset_pvcs: true
 
 # Kubeconfig（playbook/ から見て 1 つ上）
 kubeconfig_path: "{{ playbook_dir | dirname }}/.kube/rke2.yaml"

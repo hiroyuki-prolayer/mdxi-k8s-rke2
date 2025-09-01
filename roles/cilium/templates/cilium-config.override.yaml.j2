@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cilium-config
+  namespace: kube-system
+  labels:
+    k8s-app: cilium
+data:
+  enable-host-port: "{{ 'true' if (enableHostPort | bool) else 'false' }}"
+  enable-host-services: "{{ 'true' if (hostServices_enabled | bool) else 'false' }}"
+  routing-mode: "{{ routingMode }}"
+  kube-proxy-replacement: "{{ 'true' if (kubeProxyReplacement | bool) else 'false' }}"
+

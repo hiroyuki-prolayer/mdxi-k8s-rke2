@@ -1,10 +1,11 @@
 controller:
-  kind: DaemonSet
-  hostPort:
-    enabled: true
-    ports:
-      http: 80
-      https: 443
+  kind: Deployment
+  service:
+    type: NodePort
+    nodePorts:
+      http: 30080
+      https: 30443
+    externalTrafficPolicy: Local
   nodeSelector:
     ingress: "enabled"
   ingressClassResource:

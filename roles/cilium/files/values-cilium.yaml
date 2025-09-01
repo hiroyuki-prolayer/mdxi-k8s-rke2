@@ -1,15 +1,21 @@
-kubeProxyReplacement: "disabled"
-tunnel: "vxlan"
+# kube-proxy を使う（置き換えない）＝ false
+kubeProxyReplacement: false        # ← 文字列でなく boolean
 
-# v1.16 では containerRuntime.integration は削除済み。自動検出に任せる。
-# containerRuntime:
-#   integration: containerd
+# 旧 "tunnel" は削除。1.16 では routingMode を使用
+routingMode: tunnel
+enableIPv4: true
+enableIPv6: false            # ★追加
+ipam:
+  mode: kubernetes
+
+# HostPort を有効化（ingress hostPort 運用の肝）
+enableHostPort: true
+hostServices:
+  enabled: true
 
 hubble:
   enabled: true
   relay:
     enabled: true
-  # UIは別チャートに分離傾向。まずは無効化で安定を優先。
   ui:
     enabled: false
-

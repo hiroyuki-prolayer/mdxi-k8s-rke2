@@ -1,4 +1,27 @@
 ---
+# roles/harbor/tasks/main.yml の先頭に追記（resetオプション）
+- name: (optional) Uninstall harbor release
+  when: harbor_reset_pvcs | default(false)
+  kubernetes.core.helm:
+    name: harbor
+    release_namespace: harbor
+    state: absent
+    kubeconfig: "{{ kubeconfig_path }}"
+  ignore_errors: true
+
+- name: (optional) Delete all Harbor PVCs
+  when: harbor_reset_pvcs | default(false)
+  kubernetes.core.k8s:
+    api_version: v1
+    kind: PersistentVolumeClaim
+    namespace: harbor
+    state: absent
+    kubeconfig: "{{ kubeconfig_path }}"
+    wait: true
+  loop: "{{ query('kubernetes.core.k8s_info', api_version='v1', kind='PersistentVolumeClaim', namespace='harbor', kubeconfig=kubeconfig_path).resources | map(attribute='metadata.name') | list }}"
+  loop_control:
+    label: "{{ item }}"
+  ignore_errors: true
 - name: Add goharbor repo
   kubernetes.core.helm_repository:
     name: harbor
