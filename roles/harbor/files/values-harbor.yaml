@@ -1,14 +1,26 @@
 expose:
-  type: ingress
+  type: nodePort
   tls:
     enabled: true
-  ingress:
-    className: nginx
-    hosts:
-      core: harbor.ip-163-220-178-192.compute.mdx1.jp
+    secretName: harbor-tls      
+    auto:
+      commonName: harbor.ip-163-220-178-192.compute.mdx1.jp
+  nodePort:
+    ports:
+      http:
+        port: 80 
+        nodePort: 30180
+      https:
+        port: 443
+        nodePort: 30543
     annotations:
       cert-manager.io/cluster-issuer: letsencrypt-prod
       acme.cert-manager.io/http01-edit-in-place: "true"
+
+externalURL: https://harbor.ip-163-220-178-192.compute.mdx1.jp:30543
+
+harborAdminPassword: "ChangeMe#Harbor1"
+
 persistence:
   enabled: true
   resourcePolicy: "keep"
@@ -28,6 +40,4 @@ persistence:
     chartmuseum:
       size: 5Gi
       storageClass: local-path-wffc
-externalURL: https://harbor.ip-163-220-178-192.compute.mdx1.jp
 
-harborAdminPassword: "ChangeMe#Harbor1"

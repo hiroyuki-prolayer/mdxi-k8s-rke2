@@ -23,10 +23,28 @@
     recurse: true
   become: true
 
+# config.yaml の配布
 - name: Place server config
   template:
     src: config.yaml.j2
     dest: /etc/rancher/rke2/config.yaml
+    owner: root
+    group: root
+    mode: "0644"
+  register: rke2_config_file
+  become: true
+
+# 事前に registry_internal_http_endpoint が既に与えられている場合のみ、先に registries.yaml を設置
+# （未指定なら、RKE2 起動後に ClusterIP を取得してから設置する）
+- name: Place containerd registries config (pre) when endpoint provided
+  template:
+    src: registries.yaml.j2
+    dest: /etc/rancher/rke2/registries.yaml
+    owner: root
+    group: root
+    mode: "0644"
+  register: rke2_registries_file_pre
+  when: registry_internal_http_endpoint is defined and registry_internal_http_endpoint | length > 0
   become: true
 
 - name: Create token file
@@ -43,35 +61,247 @@
     state: started
   become: true
 
+# config または registries(pre) が変わったら一度だけ再起動
+- name: Restart rke2-server if config changed
+  systemd:
+    name: rke2-server
+    state: restarted
+  when:
+    - rke2_config_file is changed
+      or (rke2_registries_file_pre is defined and rke2_registries_file_pre is changed)
+  become: true
+
 - name: Wait kubeconfig present
   wait_for:
     path: /etc/rancher/rke2/rke2.yaml
     timeout: 600
   become: true
 
-- name: Fetch kubeconfig to controller (repo ./.kube)
-  fetch:
-    src: /etc/rancher/rke2/rke2.yaml
-    dest: "{{ playbook_dir | dirname }}/.kube/rke2.yaml"
-    flat: true
+# --- ここから差し替え ---
+
+# 既定値（必要なら vars で上書き可）
+- name: Set Harbor namespace/service defaults
+  set_fact:
+    harbor_namespace: "{{ harbor_namespace | default('harbor') }}"
+    harbor_registry_service: "{{ harbor_registry_service | default('harbor-harbor-registry') }}"
+
+# kubectl の場所を検出（delegate 先 = masters[0]）
+- name: Detect RKE2-bundled kubectl on delegate
+  stat:
+    path: /var/lib/rancher/rke2/bin/kubectl
+  register: kubectl_rke2
+  run_once: true
+  delegate_to: "{{ groups['masters'][0] }}"
+  delegate_facts: true
   become: true
 
-- name: Patch kubeconfig server to master IP (local)
-  delegate_to: localhost
+- name: Detect system kubectl on delegate
+  stat:
+    path: /usr/bin/kubectl
+  register: kubectl_usr
   run_once: true
-  vars:
-    kubeconfig_local: "{{ playbook_dir | dirname }}/.kube/rke2.yaml"
-  lineinfile:
-    path: "{{ kubeconfig_local }}"
-    regexp: '^\\s*server:\\s*https?://.*:6443'
-    line: "    server: https://{{ hostvars['mnode']['node_ip'] }}:6443"
+  delegate_to: "{{ groups['masters'][0] }}"
+  delegate_facts: true
+  become: true
 
-# 取得済み ~/.kube/rke2.yaml の server を master IP に書き換え
-- name: Rewrite server endpoint in fetched kubeconfig (controller)
+- name: Set kubectl_bin fact (delegate-wide)
+  set_fact:
+    kubectl_bin: >-
+      {{ '/var/lib/rancher/rke2/bin/kubectl'
+         if (kubectl_rke2.stat.exists | default(false))
+         else '/usr/bin/kubectl' }}
+  run_once: true
+  delegate_to: "{{ groups['masters'][0] }}"
+  delegate_facts: true
+  become: true
+
+# 1) Harbor Namespace が出るまで待つ（最長 ~5分）
+- name: Wait for Harbor namespace to appear
+  command: >
+    {{ kubectl_bin }} --kubeconfig=/etc/rancher/rke2/rke2.yaml
+    get ns {{ harbor_namespace }}
+  register: harbor_ns_cmd
+  changed_when: false
+  failed_when: false
+  run_once: true
+  delegate_to: "{{ groups['masters'][0] }}"
+  become: true
+  environment:
+    PATH: "{{ ansible_env.PATH }}:/var/lib/rancher/rke2/bin"
+  retries: 30
+  delay: 10
+  until: harbor_ns_cmd.rc == 0 or (registry_internal_http_endpoint | default('', true) | length) > 0
+  when: registry_internal_http_endpoint is not defined or registry_internal_http_endpoint | length == 0
+
+# 2) Service を待つ（Namespace が存在する場合のみ）
+- name: Wait for Harbor registry Service to appear
+  command: >
+    {{ kubectl_bin }} --kubeconfig=/etc/rancher/rke2/rke2.yaml
+    -n {{ harbor_namespace }}
+    get svc {{ harbor_registry_service }}
+  register: harbor_svc_cmd
+  changed_when: false
+  failed_when: false
+  run_once: true
+  delegate_to: "{{ groups['masters'][0] }}"
+  become: true
+  environment:
+    PATH: "{{ ansible_env.PATH }}:/var/lib/rancher/rke2/bin"
+  retries: 30
+  delay: 10
+  until: harbor_svc_cmd.rc == 0 or (registry_internal_http_endpoint | default('', true) | length) > 0
+  when:
+    - (registry_internal_http_endpoint is not defined or registry_internal_http_endpoint | length == 0)
+    - harbor_ns_cmd is defined and harbor_ns_cmd.rc == 0
+
+# 3) ClusterIP 取得（Service が出ているときのみ）
+- name: Get Harbor Registry ClusterIP
+  command: >
+    {{ kubectl_bin }} --kubeconfig=/etc/rancher/rke2/rke2.yaml
+    -n {{ harbor_namespace }}
+    get svc {{ harbor_registry_service }}
+    -o jsonpath={.spec.clusterIP}
+  register: harbor_registry_ip_cmd
+  changed_when: false
+  failed_when: false
+  run_once: true
+  delegate_to: "{{ groups['masters'][0] }}"
+  become: true
+  environment:
+    PATH: "{{ ansible_env.PATH }}:/var/lib/rancher/rke2/bin"
+  when:
+    - (registry_internal_http_endpoint is not defined or registry_internal_http_endpoint | length == 0)
+    - harbor_svc_cmd is defined and harbor_svc_cmd.rc == 0
+
+# 4) 取得できたら IP:5000 を endpoint として採用
+- name: Set internal HTTP endpoint from ClusterIP
+  set_fact:
+    registry_internal_http_endpoint: "http://{{ harbor_registry_ip_cmd.stdout }}:5000"
+  when:
+    - harbor_registry_ip_cmd is defined
+    - harbor_registry_ip_cmd.stdout is defined
+    - harbor_registry_ip_cmd.stdout | length > 0
+
+# 5) registries.yaml を生成（endpoint が決まっていれば）
+- name: Place containerd registries config (post) with endpoint
+  template:
+    src: registries.yaml.j2
+    dest: /etc/rancher/rke2/registries.yaml
+    owner: root
+    group: root
+    mode: "0644"
+  register: rke2_registries_file_post
+  become: true
+  when: registry_internal_http_endpoint is defined and registry_internal_http_endpoint | length > 0
+
+- name: Restart rke2-server to apply registry mirror
+  systemd:
+    name: rke2-server
+    state: restarted
+  when: rke2_registries_file_post is defined and rke2_registries_file_post is changed
+  become: true
+
+# RKE2起動 → kubeconfig 取得
+- name: Fetch kubeconfig to controller (repo ./.kube)
+  fetch: { src: /etc/rancher/rke2/rke2.yaml, dest: "{{ playbook_dir | dirname }}/.kube/rke2.yaml", flat: true }
+  become: true
+
+# 1) まず fetch 済み kubeconfig の存在を確認
+- name: Ensure fetched kubeconfig exists
   delegate_to: localhost
-  become: false
-  replace:
+  stat:
     path: "{{ playbook_dir | dirname }}/.kube/rke2.yaml"
-    regexp: '^(\\s*server: )https://127\\.0\\.0\\.1:6443$'
-    replace: '\\1https://{{ hostvars["mnode"]["node_ip"] }}:6443'
+  register: rke2_kcfg_stat
+  failed_when: not rke2_kcfg_stat.stat.exists
+
+# 2) kubeconfig 内のクラスタ名を抽出（例: default / kubernetes など）
+- name: Get cluster name from kubeconfig (local file)
+  delegate_to: localhost
+  shell: |
+    set -e
+    kubectl config view \
+      --kubeconfig "{{ playbook_dir | dirname }}/.kube/rke2.yaml" \
+      -o jsonpath='{.clusters[0].name}'
+  register: kube_cluster_name
+  changed_when: false
+
+- name: Fail if cluster name not found
+  delegate_to: localhost
+  fail:
+    msg: "No cluster name found in {{ playbook_dir | dirname }}/.kube/rke2.yaml"
+  when: kube_cluster_name.stdout | length == 0
+
+# 3) そのクラスタ名に対して server を 10.14.21.253:6443 に強制設定
+- name: Force-set server to master IP in kubeconfig (no API call)
+  delegate_to: localhost
+  shell: |
+    set -e
+    kubectl config set-cluster "{{ kube_cluster_name.stdout }}" \
+      --server="https://10.14.21.253:6443" \
+      --kubeconfig "{{ playbook_dir | dirname }}/.kube/rke2.yaml"
+
+# 4) テキストで検証（本当に 10.14.21.253 になっているか）
+- name: Assert kubeconfig now points to 10.14.21.253
+  delegate_to: localhost
+  shell: "grep -nE '^\\s*server:\\s*https://10\\.14\\.21\\.253:6443$' {{ playbook_dir | dirname }}/.kube/rke2.yaml"
+  register: kubeconfig_server_check
+  changed_when: false
+  failed_when: kubeconfig_server_check.rc != 0
+
+- name: Create/patch regcred and default SA via kubectl apply
+  delegate_to: localhost
+  vars:
+    kubeconf: "{{ playbook_dir | dirname }}/.kube/rke2.yaml"
+    DOCKERCFG: >-
+      {{
+        {
+          "auths": {
+            registry_external: {
+              "username": registry_username,
+              "password": registry_password,
+              "auth": (registry_username ~ ":" ~ registry_password) | b64encode
+            }
+          }
+        } | to_json | b64encode
+      }}
+  when:
+    - registry_external is defined
+    - registry_username is defined
+    - registry_password is defined
+    - image_pull_namespaces is defined
+    - image_pull_namespaces | length > 0
+  loop: "{{ image_pull_namespaces }}"
+  loop_control: { label: "{{ item }}" }
+  # ★ KUBECONFIG を空にしてデフォルト参照を無効化
+  environment:
+    KUBECONFIG: ""
+  shell: |
+    set -e
+    cat <<'EOF' | kubectl --kubeconfig "{{ kubeconf }}" apply --validate=false -f -
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: regcred
+      namespace: {{ item }}
+    type: kubernetes.io/dockerconfigjson
+    data:
+      .dockerconfigjson: "{{ DOCKERCFG }}"
+    ---
+    apiVersion: v1
+    kind: ServiceAccount
+    metadata:
+      name: default
+      namespace: {{ item }}
+    imagePullSecrets:
+    - name: regcred
+    EOF
+
+# デバッグ: 取れなかった場合は警告だけ出して後続へ（後で再実行すれば拾える）
+- name: Warn when Harbor registry endpoint not resolved yet
+  debug:
+    msg: >-
+      Harbor registry Service not found yet. Skipping registries.yaml for now.
+      You can set 'registry_internal_http_endpoint' explicitly (e.g. http://<ClusterIP>:5000)
+      and re-run this play.
+  when: registry_internal_http_endpoint is not defined or registry_internal_http_endpoint | length == 0
 

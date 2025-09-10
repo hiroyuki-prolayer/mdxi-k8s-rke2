@@ -34,6 +34,12 @@ rancher_bootstrap_password: "{{ vault_rancher_bootstrap }}"
 
 # harbor
 harbor_reset_pvcs: true
+registry_external: "harbor.ip-163-220-178-192.compute.mdx1.jp:30543" 
+registry_internal_http_endpoint: "http://10.43.73.29:5000"
+registry_username: "robot$rancher"
+registry_password: "4WMJYgffQlGkfU2tDlQwBSyjxlLyNMoL"
+image_pull_namespaces: ["sprint-1", "sprint-2", "sprint-3"]
+rke2_registries_path: "/etc/rancher/rke2/registries.yaml"
 
 # Kubeconfig（playbook/ から見て 1 つ上）
 kubeconfig_path: "{{ playbook_dir | dirname }}/.kube/rke2.yaml"
