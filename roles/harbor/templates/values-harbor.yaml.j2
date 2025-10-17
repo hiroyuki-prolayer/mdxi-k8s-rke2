@@ -1,0 +1,29 @@
+externalURL: https://{{ ops_fqdn }}
+
+expose:
+  type: ingress
+  ingress:
+    className: {{ ops_ingress_class }}
+    hosts:
+      core: {{ ops_fqdn }}
+    # cert-manager の自動発行アノテは使わず、明示Certificateで統一
+    # annotations:
+    #   cert-manager.io/cluster-issuer: letsencrypt-prod
+  tls:
+    enabled: true
+    certSource: secret
+    secret:
+      secretName: tls-harbor
+
+harborAdminPassword: "{{ harbor_admin_password }}"
+
+persistence:
+  enabled: true
+  resourcePolicy: "keep"
+  persistentVolumeClaim:
+    registry:    { size: 100Gi, storageClass: local-path }
+    database:    { size: 10Gi,  storageClass: local-path }
+    trivy:       { size: 5Gi,   storageClass: local-path }
+    redis:       { size: 1Gi,   storageClass: local-path }
+    chartmuseum: { size: 5Gi,   storageClass: local-path }
+

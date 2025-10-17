@@ -1,4 +1,0 @@
-time="2025-09-08T02:03:59Z" level=info msg="Starting gRPC health server..." addr=":4222" subsys=hubble-relay
-time="2025-09-08T02:03:59Z" level=info msg="Starting gRPC server..." options="{peerTarget:hubble-peer.kube-system.svc.cluster.local:443 dialTimeout:30000000000 retryTimeout:30000000000 listenAddress::4245 healthListenAddress::4222 metricsListenAddress: log:0xc00043c3f0 serverTLSConfig:<nil> insecureServer:true clientTLSConfig:0xc000800720 clusterName:default insecureClient:false observerOptions:[0x2218120 0x2218200] grpcMetrics:<nil> grpcUnaryInterceptors:[] grpcStreamInterceptors:[]}" subsys=hubble-relay
-time="2025-09-08T02:04:29Z" level=warning msg="Failed to create peer client for peers synchronization; will try again after the timeout has expired" error="context deadline exceeded" subsys=hubble-relay target="hubble-peer.kube-system.svc.cluster.local:443"
-time="2025-09-08T02:05:07Z" level=info msg="Stopping server..." subsys=hubble-relay

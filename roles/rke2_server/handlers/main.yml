@@ -1,7 +1,8 @@
+---
 - name: Restart RKE2
   service:
     name: "{{ item }}"
     state: restarted
   loop: "{{ rke2_services }}"
-  failed_when: false   # agent が無い環境でも失敗させない
+  failed_when: false
 

@@ -1,3 +1,3 @@
 # ansible-vault で暗号化して使用してください。
-vault_rke2_token: "K10d2100be48d6401054d97f55fc0fdbb7c8dd2010aa008808ff9475521fb016fca::server:16a43ef4b03e261e127fd6413a106701"
 vault_rancher_bootstrap: "Admin#ChangeMe!"
+harbor_admin_password: "ChangeMe#Harbor1"

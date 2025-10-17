@@ -1,0 +1,55 @@
+grafana:
+  adminUser: "admin"
+  adminPassword: "{{ grafana_admin_password | default('ChangeMe#Grafana1') }}"
+  grafana.ini:
+    server:
+      root_url: "%(protocol)s://%(domain)s/grafana"
+      serve_from_sub_path: true
+  service:
+    type: ClusterIP
+  ingress:
+    enabled: false  # 既存 Ingress を使う
+
+prometheus:
+  service:
+    type: ClusterIP
+  ingress:
+    enabled: false  # 既存 Ingress を使う
+  prometheusSpec:
+    # ← ここが肝心：サブパス提供に切替
+    externalUrl: "https://{{ ops_fqdn }}/prometheus"
+    routePrefix: /prometheus
+    retention: "15d"
+    resources:
+      requests:
+        memory: "4Gi"
+      limits:
+        memory: "8Gi"
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests: { storage: 10Gi }
+
+alertmanager:
+  enabled: true
+  service:
+    type: ClusterIP
+  ingress:
+    enabled: false  # 既存 Ingress を使う
+  alertmanagerSpec:
+    # ← ここもサブパス提供
+    externalUrl: "https://{{ ops_fqdn }}/alertmanager"
+    routePrefix: /alertmanager
+  config:
+    global:
+      resolve_timeout: 5m
+    route:
+      receiver: 'slack-notifications'
+    receivers:
+      - name: 'slack-notifications'
+        slack_configs:
+          - api_url: 'https://hooks.slack.com/services/XXX/YYY/ZZZ'
+            channel: '#alerts'
+

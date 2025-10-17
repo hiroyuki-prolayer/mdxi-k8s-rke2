@@ -4,12 +4,64 @@
     name: prometheus-community
     repo_url: https://prometheus-community.github.io/helm-charts
 
+- name: Render kube-prometheus-stack values
+  template:
+    src: values-kps.yaml.j2
+    dest: /tmp/values-kps.yaml
+
 - name: Install/upgrade kube-prometheus-stack
   kubernetes.core.helm:
     name: kps
     chart_ref: prometheus-community/kube-prometheus-stack
     release_namespace: monitoring
     create_namespace: true
-    kubeconfig: "{{ kubeconfig_path }}"
     values_files:
-      - "{{ role_path }}/files/values-kps.yaml"
+      - /tmp/values-kps.yaml
+
+# --- ここから追加 ---
+
+- name: Render HTTP-only Prometheus ingress (optional)
+  when: enable_http_fallback_ingress | bool
+  template:
+    src: prom-http-ingress.yaml.j2
+    dest: /tmp/prom-http-ingress.yaml
+
+- name: Apply HTTP-only Prometheus ingress (optional)
+  when: enable_http_fallback_ingress | bool
+  kubernetes.core.k8s:
+    state: present
+    src: /tmp/prom-http-ingress.yaml
+
+- name: Render HTTP-only Alertmanager ingress (optional)
+  when: enable_http_fallback_ingress | bool
+  template:
+    src: alertmanager-http-ingress.yaml.j2
+    dest: /tmp/alertmanager-http-ingress.yaml
+
+- name: Apply HTTP-only Alertmanager ingress (optional)
+  when: enable_http_fallback_ingress | bool
+  kubernetes.core.k8s:
+    state: present
+    src: /tmp/alertmanager-http-ingress.yaml
+
+# 無効化時は Ingress を削除（HTTPS へ戻すとき）
+- name: Remove HTTP-only Prometheus ingress when disabled
+  when: not enable_http_fallback_ingress | bool
+  kubernetes.core.k8s:
+    api_version: networking.k8s.io/v1
+    kind: Ingress
+    name: kps-prometheus-http
+    namespace: monitoring
+    state: absent
+
+- name: Remove HTTP-only Alertmanager ingress when disabled
+  when: not enable_http_fallback_ingress | bool
+  kubernetes.core.k8s:
+    api_version: networking.k8s.io/v1
+    kind: Ingress
+    name: kps-alertmanager-http
+    namespace: monitoring
+    state: absent
+
+# --- 追加ここまで ---
+

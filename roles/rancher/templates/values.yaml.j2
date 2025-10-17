@@ -1,0 +1,18 @@
+hostname: {{ rancher_fqdn }}
+
+replicas: 1
+bootstrapPassword: "{{ rancher_bootstrap_password }}"
+
+ingress:
+  enabled: true
+  ingressClassName: {{ rancher_ingress_class }}
+  tls:
+    source: secret
+  extraTls:
+    - hosts:
+        - {{ rancher_fqdn }}
+      secretName: tls-rancher
+  extraAnnotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/hsts: "true"

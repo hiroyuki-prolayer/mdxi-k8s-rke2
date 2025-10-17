@@ -6,12 +6,26 @@ spec:
   acme:
     email: {{ le_email }}
     server: https://acme-staging-v02.api.letsencrypt.org/directory
-    privateKeySecretRef:
-      name: le-staging-key
+    privateKeySecretRef: { name: le-staging-key }
     solvers:
-    - http01:
-        ingress:
-          class: {{ ingress_class }}
+      - selector: { dnsNames: [{{ rancher_fqdn }}] }
+        http01:
+          ingress:
+            ingressClassName: {{ rancher_ingress_class }}
+            ingressTemplate:
+              metadata:
+                annotations:
+                  nginx.ingress.kubernetes.io/ssl-redirect: "false"
+                  nginx.ingress.kubernetes.io/force-ssl-redirect: "false"
+      - selector: { dnsNames: [{{ ops_fqdn }}] }
+        http01:
+          ingress:
+            ingressClassName: {{ ops_ingress_class }}
+            ingressTemplate:
+              metadata:
+                annotations:
+                  nginx.ingress.kubernetes.io/ssl-redirect: "false"
+                  nginx.ingress.kubernetes.io/force-ssl-redirect: "false"
 ---
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
@@ -21,9 +35,24 @@ spec:
   acme:
     email: {{ le_email }}
     server: https://acme-v02.api.letsencrypt.org/directory
-    privateKeySecretRef:
-      name: le-prod-key
+    privateKeySecretRef: { name: le-prod-key }
     solvers:
-    - http01:
-        ingress:
-          class: {{ ingress_class }}
+      - selector: { dnsNames: [{{ rancher_fqdn }}] }
+        http01:
+          ingress:
+            ingressClassName: {{ rancher_ingress_class }}
+            ingressTemplate:
+              metadata:
+                annotations:
+                  nginx.ingress.kubernetes.io/ssl-redirect: "false"
+                  nginx.ingress.kubernetes.io/force-ssl-redirect: "false"
+      - selector: { dnsNames: [{{ ops_fqdn }}] }
+        http01:
+          ingress:
+            ingressClassName: {{ ops_ingress_class }}
+            ingressTemplate:
+              metadata:
+                annotations:
+                  nginx.ingress.kubernetes.io/ssl-redirect: "false"
+                  nginx.ingress.kubernetes.io/force-ssl-redirect: "false"
+

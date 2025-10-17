@@ -1,36 +1,107 @@
 ---
-# 追加: helm-diff プラグインをインストール/更新（>= 3.4.1）
-- name: Ensure helm-diff plugin (>=3.4.1) is installed
-  shell: |
-    set -e
-    # 既に入っていれば update、無ければ install（install が失敗したら update にフォールバック）
-    helm plugin install https://github.com/databus23/helm-diff --version v3.9.9 || \
-    helm plugin update diff
-  args:
-    executable: /bin/bash
-  changed_when: false
-  register: helm_diff_result
-
-# 追加: 実際に有効化されたか軽く確認（任意）
-- name: Verify helm-diff is available
+# helm-diff は便利なので既存のまま
+- name: Check if helm-diff plugin is installed
   command: helm plugin list
   register: helm_plugins
   changed_when: false
+  tags: ["verify"]
+
+- name: Install helm-diff plugin if not present
+  shell: helm plugin install https://github.com/databus23/helm-diff --version v3.9.9
+  args: { executable: /bin/bash }
+  when: "'diff' not in helm_plugins.stdout"
+  tags: ["helm"]
+
+# レポ追加
 - name: Add ingress-nginx repo
   kubernetes.core.helm_repository:
     name: ingress-nginx
     repo_url: https://kubernetes.github.io/ingress-nginx
+  tags: ["repo"]
 
-- name: Install/upgrade ingress-nginx
+###############################################################################
+# Rancher 系（wnode001 固定 / IngressClass=rancher）
+###############################################################################
+- name: Install/upgrade ingress-nginx for Rancher (hostNetwork on wnode001)
   kubernetes.core.helm:
-    name: ingress-nginx
+    name: ingress-nginx-rancher
     chart_ref: ingress-nginx/ingress-nginx
-    release_namespace: ingress-nginx
+    release_namespace: ingress-nginx-rancher
     create_namespace: true
     kubeconfig: "{{ kubeconfig_path }}"
-    values_files:
-      - "{{ role_path }}/files/values-ingress.yaml"
     values:
       controller:
+        ingressClass: "{{ rancher_ingress_class }}"
         ingressClassResource:
-          name: "{{ ingress_class }}"
+          enabled: true
+          name: "{{ rancher_ingress_class }}"
+          # controllerValue はデフォルト(k8s.io/ingress-nginx)を使用
+        hostNetwork: "{{ ingress_hostnetwork }}"
+        dnsPolicy: "ClusterFirstWithHostNet"
+        replicaCount: 1
+        nodeSelector:
+          kubernetes.io/hostname: "{{ rancher_ingress_node }}"
+        # hostNetwork を使うため Service は無効化
+        service:
+          enabled: false
+        config:
+          use-forwarded-headers: "true"
+          ssl-redirect: "true"
+          force-ssl-redirect: "true"
+  tags: ["install","rancher-ing"]
+
+###############################################################################
+# Ops 系（Harbor/Grafana/Prom/AM 用：wnode002 固定 / IngressClass=ops）
+###############################################################################
+- name: Install/upgrade ingress-nginx for Ops (hostNetwork on wnode002)
+  kubernetes.core.helm:
+    name: ingress-nginx-ops
+    chart_ref: ingress-nginx/ingress-nginx
+    release_namespace: ingress-nginx-ops
+    create_namespace: true
+    kubeconfig: "{{ kubeconfig_path }}"
+    values:
+      controller:
+        ingressClass: "{{ ops_ingress_class }}"
+        ingressClassResource:
+          enabled: true
+          name: "{{ ops_ingress_class }}"
+        hostNetwork: "{{ ingress_hostnetwork }}"
+        dnsPolicy: "ClusterFirstWithHostNet"
+        replicaCount: 1
+        nodeSelector:
+          kubernetes.io/hostname: "{{ ops_ingress_node_primary }}"
+        service:
+          enabled: false
+        config:
+          use-forwarded-headers: "true"
+          ssl-redirect: "false"          # ← ここを false に
+          force-ssl-redirect: "false"    # ← ここも false に
+
+###############################################################################
+# サブパス Ingress（Grafana/Prometheus/Alertmanager を ops_fqdn 配下に束ねる）
+# ※ Harbor は Helm（harbor role 側）でルート `/` を専有させる。ここでは触らない。
+###############################################################################
+# サブパス Ingress 用 Namespace を用意
+- name: Ensure ops subpath ingress namespace exists
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: "{{ ops_ingress_ns }}"
+  tags: ["ops-ing","ops-subpath","ns"]
+
+- name: Render ops subpath ingress manifest
+  template:
+    src: ops-subpath-ingress.yaml.j2
+    dest: /tmp/ops-subpath-ingress.yaml
+
+- name: Apply ops subpath ingress (Grafana/Prometheus/Alertmanager)
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition: "{{ lookup('template', 'ops-subpath-ingress.yaml.j2') }}"
+  tags: ["ops-ing","ops-subpath"]
+

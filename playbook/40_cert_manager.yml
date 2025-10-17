@@ -5,21 +5,42 @@
     - ../group_vars/all.yml
     - ../group_vars/vault.yml
 
-  # ここで kubeconfig を自己完結的に解決
   vars:
-    kubeconfig_path: "{{ lookup('env','KUBECONFIG') | default(playbook_dir | dirname ~ '/.kube/rke2.yaml', true) }}"
-    ingress_class: nginx
+    # ← env を見ず、常に Project/.kube/rke2.yaml を使う
+    kubeconfig_path: "{{ playbook_dir | dirname }}/.kube/rke2.yaml"
 
-  # k8s/helm モジュールに kubeconfig を自動適用
+  pre_tasks:
+    - name: Ensure kubeconfig exists
+      ansible.builtin.stat:
+        path: "{{ kubeconfig_path }}"
+      register: kc
+    - name: Fail if kubeconfig missing
+      ansible.builtin.fail:
+        msg: "kubeconfig not found: {{ kubeconfig_path }}"
+      when: not kc.stat.exists
+    - name: Pin kubeconfig server to RKE2 API ({{ rke2_server_ip }}:6443)
+      ansible.builtin.replace:
+        path: "{{ kubeconfig_path }}"
+        regexp: '^(\\s*server:\\s*)https?://[^:]+(:[0-9]+)?'
+        replace: '\1https://{{ rke2_server_ip }}:6443'
+    - name: Show kubeconfig server
+      ansible.builtin.shell: "awk '/server: /{print $2}' {{ kubeconfig_path }} | head -1"
+      register: kc_server
+      changed_when: false
+    - debug:
+        msg: "Using API server {{ kc_server.stdout }} and kubeconfig {{ kubeconfig_path }}"
+
   module_defaults:
     kubernetes.core.helm:
       kubeconfig: "{{ kubeconfig_path }}"
     kubernetes.core.k8s:
       kubeconfig: "{{ kubeconfig_path }}"
 
-  # 一部ツールが KUBECONFIG を参照するため環境変数も付与
   environment:
     KUBECONFIG: "{{ kubeconfig_path }}"
+    NO_PROXY: "127.0.0.1,localhost,10.0.0.0/8,.svc,.cluster.local,{{ rke2_server_ip }}"
+    no_proxy: "127.0.0.1,localhost,10.0.0.0/8,.svc,.cluster.local,{{ rke2_server_ip }}"
 
   roles:
-    - { role: cert_manager, tags: ["cert","letsencrypt"] }
+    - { role: cert_manager, tags: ["cert", "letsencrypt"] }
+

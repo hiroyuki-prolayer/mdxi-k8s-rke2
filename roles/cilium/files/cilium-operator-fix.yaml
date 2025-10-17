@@ -1,0 +1,58 @@
+# Cilium Operator のクラッシュ回避のための設定
+# 必須引数のみを指定し、バグのある --debug 引数を意図的に除外
+operator:
+  # operator.extraArgs に有効な引数をリストとして指定することで、
+  # 不正な --debug 引数を含むデフォルトの args リストを上書きすることを期待
+  extraArgs:
+    - --config-dir=/tmp/cilium/config-map
+  
+  # RKE2 ミラーイメージとバージョン v1.18.1 を設定
+  image:
+    repository: rancher/mirrored-cilium-operator-generic
+    tag: v1.18.1
+    override: rancher/mirrored-cilium-operator-generic:v1.18.1 # 念のため完全なオーバーライドも追加
+
+  # デバッグ設定を明示的に無効化し、バグのあるテンプレートの処理を回避
+  debug:
+    enabled: false
+    verbose: ""
+
+# Cilium Agent / Init Container の設定
+image:
+  repository: rancher/mirrored-cilium-cilium
+  tag: v1.18.1
+
+# 可観測性(Hubble)の設定
+hubble:
+  enabled: true
+  tls:
+    enabled: false  
+  relay:
+    enabled: true
+    # RKE2 ミラーイメージを設定
+    image:
+      repository: rancher/mirrored-cilium-hubble-relay
+      tag: v1.18.1
+    # 既存の Pod テンプレートと整合性を保つための推奨設定
+    securityContext:
+      runAsUser: 65532
+      runAsGroup: 65532
+      fsGroup: 65532
+      allowPrivilegeEscalation: false
+      runAsNonRoot: true
+    tls:
+      server:
+        enabled: false
+    resources:
+      limits:
+        memory: 1Gi
+      requests:
+        memory: 512Mi  
+
+# Helm スキーマエラーとクラッシュ回避のためのグローバル設定
+debug:
+  enabled: false
+  verbose: ""
+kubeProxyReplacement: true
+nodePort:
+  enabled: true

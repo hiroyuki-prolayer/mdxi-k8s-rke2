@@ -26,8 +26,7 @@
   vars:
     kubeconfig_path: "{{ lookup('env','KUBECONFIG') | default(playbook_dir | dirname ~ '/.kube/rke2.yaml', true) }}"
     rke2_server_ip: "{{ hostvars['mnode']['node_ip'] | default('10.14.23.161') }}"
-    # masters で拾った実トークンを優先
     rke2_token: "{{ hostvars[groups['masters'][0]].cluster_token | default(vault_rke2_token) }}"
-    force_rejoin: false   # 必要時のみ true に（説明は下記）
+    force_rejoin: false
   roles:
     - { role: rke2_agent, tags: ["rke2","agent"] }

@@ -1,45 +1,70 @@
 cluster_name: rke2-mdx1
+
+project_root: "{{ playbook_dir | dirname }}"
+kubeconfig_path: "{{ project_root }}/.kube/rke2.yaml"
+
+# 既存用途のまま（未使用ならそのまま）
 cluster_domain: ip-163-220-178-192.compute.mdx1.jp
 
-# FQDN（DNS で 80/443 を ingress ノードに向ける）
-rancher_fqdn: rancher.ip-163-220-178-192.compute.mdx1.jp
-harbor_fqdn: harbor.ip-163-220-178-192.compute.mdx1.jp
-grafana_fqdn: grafana.ip-163-220-178-192.compute.mdx1.jp
-prometheus_fqdn: prometheus.ip-163-220-178-192.compute.mdx1.jp
-alert_fqdn: alert.ip-163-220-178-192.compute.mdx1.jp
+# HTTP一時Ingressの有効/無効（monitoring:prometheus,alertmanager）
+enable_http_fallback_ingress: true
 
-# Let’s Encrypt
+# === Let's Encrypt ===
 le_email: admin@ip-163-220-178-192.compute.mdx1.jp
+use_letsencrypt: true     # ← 仕様どおり true に
+
+# === FQDN ===
+rancher_fqdn: ip-163-220-178-192.compute.mdx1.jp
+ops_fqdn: ip-163-220-178-7.compute.mdx1.jp
+
+# Ingress クラス名（2系統）
+rancher_ingress_class: rancher
+ops_ingress_class: ops
+
+# Ingress を置く Namespace（既定: ops-gui）
+ops_ingress_ns: ops-gui
+
+# Rancher用のTLS Secret名（Ingressが参照する）
+rancher_tls_secret: tls-rancher
+
+# バックエンド Service 名/ポート（既定: 素の名前）
+grafana_service_name: kps-grafana
+grafana_service_port: 80
+prometheus_service_name: kps-kube-prometheus-stack-prometheus
+prometheus_service_port: 9090
+alertmanager_service_name: kps-kube-prometheus-stack-alertmanager
+alertmanager_service_port: 9093
 
 # RKE2
 rke2_channel: "stable"
 rke2_server_ip: "{{ hostvars['mnode']['node_ip'] }}"
-rke2_token: "{{ vault_rke2_token }}"
+rke2_token: K1090e3496f720db967c64313f9284b84dfa05905bfeb4fe23b09633a4b93642f31::server:16a43ef4b03e261e127fd6413a106701
 
 # Helm
 helm_version: "v3.15.3"
 
-# Cilium
+# Cilium（今回 hostNetwork 運用なので NodePort/hostPort は不要だが既存値は温存）
 enableHostPort: true
-hostServices_enabled: true
+enableNodePort: true
+hostServices:
+  enabled: true
 routingMode: tunnel
 kubeProxyReplacement: false
+enableIPv6: false
 
-# Ingress
-ingress_class: nginx
-use_hostport: true
+# Ingress を立てるノード（ホスト名は k8s の Node 名に一致している前提）
+rancher_ingress_node: wnode001
+ops_ingress_node_primary: wnode002
+ops_ingress_node_secondary: wnode003   # 手動切替時に使用
+
+# Ingress を hostNetwork で 80/443 を直接受ける
+ingress_hostnetwork: true
 
 # Rancher 初期パスワード（初回ログイン後に変更）
 rancher_bootstrap_password: "{{ vault_rancher_bootstrap }}"
 
 # harbor
 harbor_reset_pvcs: true
-registry_external: "harbor.ip-163-220-178-192.compute.mdx1.jp:30543" 
-registry_internal_http_endpoint: "http://10.43.73.29:5000"
-registry_username: "robot$rancher"
-registry_password: "4WMJYgffQlGkfU2tDlQwBSyjxlLyNMoL"
-image_pull_namespaces: ["sprint-1", "sprint-2", "sprint-3"]
-rke2_registries_path: "/etc/rancher/rke2/registries.yaml"
 
 # Kubeconfig（playbook/ から見て 1 つ上）
 kubeconfig_path: "{{ playbook_dir | dirname }}/.kube/rke2.yaml"
@@ -49,3 +74,4 @@ time_servers:
   - ntp.nict.jp
   - ntp.jst.mfeed.ad.jp
   - pool.ntp.org
+

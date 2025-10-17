@@ -1,29 +1,44 @@
 ---
-- name: Add cilium repo
+- name: Add Cilium Helm repository
   kubernetes.core.helm_repository:
     name: cilium
     repo_url: https://helm.cilium.io/
 
-- name: Install/upgrade cilium
-  kubernetes.core.helm:
-    name: cilium
-    chart_ref: cilium/cilium
-    chart_version: "1.16.3"        # v1.16系に固定
-    release_namespace: kube-system
-    create_namespace: false
-    kubeconfig: "{{ kubeconfig_path }}"
-    values_files:
-      - "{{ role_path }}/files/values-cilium.yaml"
-    values:
-      kubeProxyReplacement: "disabled"
-      # v1.15以降は 'tunnel' キー廃止。必要なら tunnelProtocol を使う:
-      # tunnelProtocol: "vxlan"
-      hubble:
-        enabled: true
-        relay:
-          enabled: true
-        ui:
-          enabled: false
+- name: Install or upgrade Cilium using Helm CLI
+  command: >
+    helm upgrade --install cilium cilium/cilium
+      --namespace kube-system
+      --version 1.18.1
+      --values {{ role_path }}/files/cilium-operator-fix.yaml
+      --timeout 600s
   environment:
     KUBECONFIG: "{{ kubeconfig_path }}"
+
+- name: Render cilium-config override ConfigMap
+  ansible.builtin.template:
+    src: "{{ role_path }}/templates/cilium-config.override.yaml.j2"
+    dest: "/tmp/cilium-config.override.yaml"
+
+- name: Apply cilium-config override
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    force: true
+    src: "/tmp/cilium-config.override.yaml"
+
+- name: Restart Cilium DaemonSet to reload config
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: patched
+    definition:
+      apiVersion: apps/v1
+      kind: DaemonSet
+      metadata:
+        name: cilium
+        namespace: kube-system
+      spec:
+        template:
+          metadata:
+            annotations:
+              reload-at: "{{ lookup('pipe', 'date +%s') }}"
 

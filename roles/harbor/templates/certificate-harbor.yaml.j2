@@ -1,0 +1,15 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: harbor-cert
+  namespace: harbor
+spec:
+  secretName: tls-harbor
+  dnsNames:
+    - {{ ops_fqdn }}
+  issuerRef:
+    kind: Issuer                 # ← ClusterIssuer ではなく Issuer
+    name: letsencrypt-prod-ops   # ← ①で作る Issuer 名
+  privateKey:
+    rotationPolicy: Always
+

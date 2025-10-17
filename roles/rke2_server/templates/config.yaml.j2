@@ -1,11 +1,17 @@
 write-kubeconfig-mode: "0644"
+
+token: "{{ rke2_token }}"
+
 disable:
   - rke2-canal
   - rke2-ingress-nginx
+
 cni: none
-node-ip: {{ hostvars[inventory_hostname]['node_ip'] }}
-node-name: {{ inventory_hostname }}
+
+node-ip: "{{ hostvars[inventory_hostname]['node_ip'] | default(ansible_host) }}"
+node-name: "{{ inventory_hostname }}"
+
 tls-san:
-  - 10.14.21.253        # mnode のIP（bastionからの到達先）
   - mnode
+  - 10.14.23.164
   - ip-163-220-178-192.compute.mdx1.jp

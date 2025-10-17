@@ -1,29 +1,41 @@
----
-- name: Create WFFC local-path StorageClass (new name)
+- name: Check if local-path StorageClass exists
+  kubernetes.core.k8s_info:
+    kind: StorageClass
+    api_version: storage.k8s.io/v1
+    name: local-path
+  register: sc_localpath
+  ignore_errors: true
+  tags: ["check"]
+
+- name: Check if local-path-provisioner pod exists
+  kubernetes.core.k8s_info:
+    kind: Pod
+    namespace: local-path-storage
+  register: lp_pods
+  ignore_errors: true
+  tags: ["check"]
+
+- name: Apply local-path-provisioner manifest
+  ansible.builtin.shell: |
+    kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/master/deploy/local-path-storage.yaml
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
+  when: lp_pods.resources | length == 0
+  tags: ["provisioner"]
+
+- name: Create local-path StorageClass (default with WFFC)
   kubernetes.core.k8s:
-    kubeconfig: "{{ kubeconfig_path }}"
     state: present
     definition:
       apiVersion: storage.k8s.io/v1
       kind: StorageClass
       metadata:
-        name: local-path-wffc
+        name: local-path
         annotations:
           storageclass.kubernetes.io/is-default-class: "true"
       provisioner: rancher.io/local-path
       reclaimPolicy: Delete
       volumeBindingMode: WaitForFirstConsumer
-
-- name: Remove default annotation from old local-path (if exists)
-  kubernetes.core.k8s:
-    kubeconfig: "{{ kubeconfig_path }}"
-    state: patched
-    kind: StorageClass
-    api_version: storage.k8s.io/v1
-    name: local-path
-    definition:
-      metadata:
-        annotations:
-          storageclass.kubernetes.io/is-default-class: null
-  ignore_errors: true
+  when: sc_localpath.resources | length == 0
+  tags: ["create"]
 

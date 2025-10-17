@@ -1,19 +1,14 @@
 ---
-- hosts: masters
+- name: Setup RKE2 server on master nodes
+  hosts: masters
   become: true
   vars_files:
     - ../group_vars/all.yml
-    - ../group_vars/vault.yml
 
-  # ★ 追加: 役割に渡す変数（外部名→内部HTTPにミラー）
   vars:
-    # 外部から見えるレジストリ名（クライアントが push/pull で使うホスト:ポート）
-    registry_external: "harbor.ip-163-220-178-192.compute.mdx1.jp:30543"
-    # クラスタ内で実際に叩かせる内部HTTPエンドポイント（Service名:5000）
-    registry_internal_http_endpoint: "http://harbor-harbor-registry.harbor.svc.cluster.local:5000"
-    # masterだけの環境なら server のみでOK（混在時は role の defaults のままでも可）
     rke2_services:
       - rke2-server
 
   roles:
-    - { role: rke2_server, tags: ["rke2","server"] }
+    - { role: rke2_server, tags: ["rke2", "server"] }
+

@@ -6,8 +6,10 @@ metadata:
   labels:
     k8s-app: cilium
 data:
-  enable-host-port: "{{ 'true' if (enableHostPort | bool) else 'false' }}"
-  enable-host-services: "{{ 'true' if (hostServices_enabled | bool) else 'false' }}"
+  enable-host-port: "{{ enableHostPort | ternary('true', 'false') }}"
+  enable-host-services: "{{ hostServices.enabled | ternary('true', 'false') }}"
+  enable-node-port: "{{ enableNodePort | ternary('true', 'false') }}"
   routing-mode: "{{ routingMode }}"
-  kube-proxy-replacement: "{{ 'true' if (kubeProxyReplacement | bool) else 'false' }}"
+  kube-proxy-replacement: "{{ kubeProxyReplacement | ternary('true', 'false') }}"
+  enable-ipv6: "{{ enableIPv6 | ternary('true', 'false') }}"
 

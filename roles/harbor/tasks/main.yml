@@ -1,13 +1,19 @@
 ---
-# roles/harbor/tasks/main.yml の先頭に追記（resetオプション）
 - name: (optional) Uninstall harbor release
   when: harbor_reset_pvcs | default(false)
   kubernetes.core.helm:
     name: harbor
     release_namespace: harbor
     state: absent
-    kubeconfig: "{{ kubeconfig_path }}"
   ignore_errors: true
+
+- name: (optional) Get list of Harbor PVCs
+  when: harbor_reset_pvcs | default(false)
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: PersistentVolumeClaim
+    namespace: harbor
+  register: harbor_pvcs
 
 - name: (optional) Delete all Harbor PVCs
   when: harbor_reset_pvcs | default(false)
@@ -15,24 +21,153 @@
     api_version: v1
     kind: PersistentVolumeClaim
     namespace: harbor
+    name: "{{ item.metadata.name }}"
     state: absent
-    kubeconfig: "{{ kubeconfig_path }}"
     wait: true
-  loop: "{{ query('kubernetes.core.k8s_info', api_version='v1', kind='PersistentVolumeClaim', namespace='harbor', kubeconfig=kubeconfig_path).resources | map(attribute='metadata.name') | list }}"
+  loop: "{{ harbor_pvcs.resources }}"
   loop_control:
-    label: "{{ item }}"
+    label: "{{ item.metadata.name }}"
   ignore_errors: true
+
+- name: Ensure harbor namespace exists
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: harbor
+
 - name: Add goharbor repo
   kubernetes.core.helm_repository:
     name: harbor
     repo_url: https://helm.goharbor.io
 
-- name: Install/upgrade harbor
+- name: Render Harbor values.yaml
+  template:
+    src: values-harbor.yaml.j2
+    dest: /tmp/values-harbor.yaml
+
+- name: Install/upgrade harbor (IngressClass={{ ops_ingress_class }}, host={{ ops_fqdn }})
   kubernetes.core.helm:
     name: harbor
     chart_ref: harbor/harbor
     release_namespace: harbor
-    create_namespace: true
-    kubeconfig: "{{ kubeconfig_path }}"
+    create_namespace: false
     values_files:
-      - roles/harbor/files/values-harbor.yaml
+      - /tmp/values-harbor.yaml
+
+- name: Label harbor namespace for PSA baseline (allow ACME solver pod)
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: harbor
+        labels:
+          pod-security.kubernetes.io/enforce: "baseline"
+          pod-security.kubernetes.io/audit: "baseline"
+          pod-security.kubernetes.io/warn: "baseline"
+
+# 1) Harbor 専用 Issuer を適用
+- name: Apply namespace-scoped Issuer (ops ingress solver)
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('template', 'issuer-ops.yaml.j2') }}"
+
+# 2) 過去の ACME アーティファクトを掃除（再発行のため）
+- name: Cleanup previous ACME artifacts (if any)
+  block:
+    - kubernetes.core.k8s: { state: absent, api_version: cert-manager.io/v1, kind: Certificate, name: harbor-cert, namespace: harbor }
+    - kubernetes.core.k8s: { state: absent, api_version: v1,                 kind: Secret,      name: tls-harbor,  namespace: harbor }
+    - kubernetes.core.k8s_info:
+        api_version: acme.cert-manager.io/v1
+        kind: Order
+        namespace: harbor
+      register: old_orders
+    - kubernetes.core.k8s:
+        state: absent
+        api_version: acme.cert-manager.io/v1
+        kind: Order
+        name: "{{ item.metadata.name }}"
+        namespace: harbor
+      loop: "{{ old_orders.resources | default([]) }}"
+      loop_control: { label: "{{ item.metadata.name }}" }
+    - kubernetes.core.k8s_info:
+        api_version: acme.cert-manager.io/v1
+        kind: Challenge
+        namespace: harbor
+      register: old_challs
+    - kubernetes.core.k8s:
+        state: absent
+        api_version: acme.cert-manager.io/v1
+        kind: Challenge
+        name: "{{ item.metadata.name }}"
+        namespace: harbor
+      loop: "{{ old_challs.resources | default([]) }}"
+      loop_control: { label: "{{ item.metadata.name }}" }
+  ignore_errors: true
+
+# 3) Certificate を作成（これをトリガに Order/Challenge が生成）
+- name: Apply Certificate for Harbor (cert-manager)
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('template', 'certificate-harbor.yaml.j2') }}"
+
+# 4) Challenge が現れるまで待つ
+- name: Wait for ACME Challenge to appear
+  kubernetes.core.k8s_info:
+    api_version: acme.cert-manager.io/v1
+    kind: Challenge
+    namespace: harbor
+  register: challs
+  until: challs.resources | length > 0
+  retries: 30
+  delay: 5
+
+# 5) Challenge が "presented: true"（＝solver Ingress/Pod が作成済み）になるまで待つ
+- name: Wait for Challenge to be presented
+  kubernetes.core.k8s_info:
+    api_version: acme.cert-manager.io/v1
+    kind: Challenge
+    namespace: harbor
+  register: challs2
+  until: >
+    challs2.resources | selectattr('status.presented','defined')
+                      | selectattr('status.presented')
+                      | list | length > 0
+  retries: 30
+  delay: 5
+
+# 6) （参考）solver Ingress/Pod の存在を確認（失敗時のデバッグ用）
+- name: Show solver Ingress and Pods (debug aid)
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Pod
+    namespace: harbor
+    label_selectors:
+      - "acme.cert-manager.io/http-domain={{ ops_fqdn }}"
+  register: solver_po
+  changed_when: false
+- debug:
+    var: solver_po.resources | map(attribute='metadata.name') | list
+
+# 7) 最終的に Certificate Ready=True を待つ
+- name: Wait Certificate to be Ready
+  kubernetes.core.k8s_info:
+    api_version: cert-manager.io/v1
+    kind: Certificate
+    name: harbor-cert
+    namespace: harbor
+  register: cert_info
+  until: >
+    cert_info.resources | length > 0 and
+    (
+      cert_info.resources[0].status.conditions | default([]) |
+      selectattr('type','equalto','Ready') |
+      selectattr('status','equalto','True') | list | length
+    ) > 0
+  retries: 40
+  delay: 6
+

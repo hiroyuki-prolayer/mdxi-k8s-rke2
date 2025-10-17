@@ -1,7 +1,6 @@
 ---
 - name: Create cattle-system namespace
   kubernetes.core.k8s:
-    kubeconfig: "{{ kubeconfig_path }}"
     state: present
     definition:
       apiVersion: v1
@@ -9,25 +8,119 @@
       metadata:
         name: cattle-system
 
-- name: Add rancher repo
+- name: Add Rancher Helm repo
   kubernetes.core.helm_repository:
     name: rancher-latest
     repo_url: https://releases.rancher.com/server-charts/latest
 
-- name: Install/upgrade rancher
+- name: Update Helm repositories
+  ansible.builtin.command: helm repo update
+  changed_when: false
+
+- name: Render Rancher Helm values.yaml
+  template:
+    src: values.yaml.j2
+    dest: /tmp/rancher-values.yaml
+
+- name: Install/upgrade Rancher with Ingress (IngressClass={{ rancher_ingress_class }})
   kubernetes.core.helm:
     name: rancher
     chart_ref: rancher-latest/rancher
     release_namespace: cattle-system
     create_namespace: false
-    kubeconfig: "{{ kubeconfig_path }}"
-    values:
-      hostname: "rancher.ip-163-220-178-192.compute.mdx1.jp"
-      ingress:
-        tls:
-          source: letsEncrypt
-      letsEncrypt:
-        email: "admin@ip-163-220-178-192.compute.mdx1.jp"
-        environment: production
-      replicas: 1
-      bootstrapPassword: "{{ rancher_bootstrap_password }}"
+    values_files:
+      - /tmp/rancher-values.yaml
+
+# ---- ここから最適化タスク ----
+
+- name: Wait Rancher deployment to be available
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    name: rancher
+    namespace: cattle-system
+  register: rancher_dep
+  until: rancher_dep.resources and rancher_dep.resources[0].status.availableReplicas|default(0) | int >= 1
+  retries: 30
+  delay: 10
+
+- name: Wait TLS secret issued by cert-manager (tls-rancher)
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Secret
+    name: tls-rancher
+    namespace: cattle-system
+  register: tls_sec
+  until: tls_sec.resources | length > 0
+  retries: 30
+  delay: 10
+
+- name: Ensure server-url setting is the public FQDN (https://{{ rancher_fqdn }})
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: management.cattle.io/v3
+      kind: Setting
+      metadata:
+        name: server-url
+      value: "https://{{ rancher_fqdn }}"
+
+- name: Read current server-url
+  kubernetes.core.k8s_info:
+    api_version: management.cattle.io/v3
+    kind: Setting
+    name: server-url
+  register: srvurl
+
+- name: Compute desired/current server-url
+  ansible.builtin.set_fact:
+    desired_server_url: "https://{{ rancher_fqdn }}"
+    current_server_url: "{{ (srvurl.resources | default([])) | length > 0 and srvurl.resources[0].value or '' }}"
+
+- name: Update server-url if different
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: management.cattle.io/v3
+      kind: Setting
+      metadata:
+        name: server-url
+      value: "{{ desired_server_url }}"
+  when: current_server_url != desired_server_url
+  register: server_url_patched
+
+- name: Generate restart timestamp
+  ansible.builtin.set_fact:
+    restart_ts: "{{ lookup('pipe', 'date -u +%Y-%m-%dT%H:%M:%SZ') }}"
+
+- name: Restart Rancher deployment if server-url updated
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: rancher
+        namespace: cattle-system
+      spec:
+        template:
+          metadata:
+            annotations:
+              restartedAt: "{{ restart_ts }}"
+  when: server_url_patched is defined and server_url_patched.changed
+
+- name: Wait for Rancher rollout (only if restarted)
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    name: rancher
+    namespace: cattle-system
+  register: dep_after
+  until: dep_after.resources
+         and dep_after.resources[0].status.observedGeneration
+             == dep_after.resources[0].metadata.generation
+         and (dep_after.resources[0].status.availableReplicas | default(0)) | int >= 1
+  retries: 30
+  delay: 10
+  when: server_url_patched is defined and server_url_patched.changed
+

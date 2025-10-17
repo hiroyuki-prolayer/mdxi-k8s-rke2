@@ -1,5 +1,6 @@
 ---
 rke2_channel: "stable"
+rke2_server_port: 9345
 
 # kubectl のコマンド（PATHにあるなら単に kubectl でOK）
 kubectl: "kubectl"

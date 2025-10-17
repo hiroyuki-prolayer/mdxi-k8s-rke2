@@ -1,21 +1,53 @@
-# kube-proxy を使う（置き換えない）＝ false
-kubeProxyReplacement: false        # ← 文字列でなく boolean
+image:
+  tag: "v1.18.1"
 
-# 旧 "tunnel" は削除。1.16 では routingMode を使用
-routingMode: tunnel
+kubeProxyReplacement: false
+routingMode: "tunnel"
+nodePort:
+  enabled: true
+  directRoutingDevice: "eth0"  # 必要に応じて調整
 enableIPv4: true
-enableIPv6: false            # ★追加
+enableIPv6: false
+ipv6:
+  enabled: false
+
 ipam:
   mode: kubernetes
 
-# HostPort を有効化（ingress hostPort 運用の肝）
 enableHostPort: true
+enableNodePort: true
+
 hostServices:
   enabled: true
 
+operator:
+  enabled: true
+  env:
+    - name: CILIUM_DEBUG
+      value: "false"
+
 hubble:
   enabled: true
+  listenAddress: ":4244"
+  tls:
+    enabled: false
+  peer:
+    enabled: true
   relay:
     enabled: true
-  ui:
-    enabled: false
+    peerTarget: hubble-peer.kube-system.svc.cluster.local:4244
+    peerService:
+      port: 4244
+    tls:
+      server:
+        enabled: false
+      client:
+        enabled: false
+    resources:
+      limits:
+        cpu: 500m
+        memory: 4Gi
+      requests:
+        cpu: 100m
+        memory: 1Gi
+

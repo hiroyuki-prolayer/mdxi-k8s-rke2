@@ -1,0 +1,47 @@
+- name: Redirect Harbor traffic from external FQDN to internal service using iptables
+  vars:
+    harbor_cluster_ip: "10.43.26.109"
+  hosts:
+    - masters
+    - workers
+    - new_workers
+  become: true
+  tasks:
+    - name: Replace RIKEN mirror with official Ubuntu mirror
+      ansible.builtin.replace:
+        path: /etc/apt/sources.list
+        regexp: 'http://ftp\.riken\.jp'
+        replace: 'http://archive.ubuntu.com'
+
+    - name: Run apt-get update
+      ansible.builtin.apt:
+        update_cache: yes
+
+    - name: Install iptables-persistent for rule persistence
+      ansible.builtin.apt:
+        name: iptables-persistent
+        state: present
+
+    - name: Add iptables DNAT rule to redirect Harbor traffic
+      ansible.builtin.shell: >
+        iptables -t nat -C OUTPUT -p tcp -d harbor.ip-163-220-178-192.compute.mdx1.jp --dport 30180
+        -j DNAT --to-destination {{ harbor_cluster_ip }}:80
+        || iptables -t nat -A OUTPUT -p tcp -d harbor.ip-163-220-178-192.compute.mdx1.jp --dport 30180
+        -j DNAT --to-destination {{ harbor_cluster_ip }}:80
+
+    - name: Ensure /etc/iptables directory exists
+      ansible.builtin.file:
+        path: /etc/iptables
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Save iptables rules to /etc/iptables/rules.v4
+      ansible.builtin.shell: iptables-save > /etc/iptables/rules.v4
+
+    - name: Restart netfilter-persistent to apply saved rules
+      ansible.builtin.systemd:
+        name: netfilter-persistent
+        state: restarted
+        enabled: true
