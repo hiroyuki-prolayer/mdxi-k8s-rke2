@@ -1,0 +1,63 @@
+- hosts: bastion
+  gather_facts: false
+  vars_files:
+    - ../group_vars/all.yml
+    - ../group_vars/vault.yml
+  
+  vars:
+    kubeconfig_path: "{{ playbook_dir | dirname }}/.kube/rke2.yaml"
+
+- name: Install Kueue with existing Prometheus integration
+  hosts: localhost
+  connection: local
+  gather_facts: no
+
+  tasks:
+    - name: Create kueue-system namespace
+      kubernetes.core.k8s:
+        api_version: v1
+        kubeconfig: "/home/mdxuser/mdxi-k8s-rke2/.kube/rke2.yaml" 
+        kind: Namespace
+        name: kueue-system
+
+    - name: Add Kueue Helm repository via shell
+      ansible.builtin.shell: |
+        helm repo add kueue https://kubernetes-sigs.github.io/kueue
+        helm repo update
+
+    - name: Install Kueue via Helm with feature gates
+      ansible.builtin.shell: |
+        helm install kueue oci://registry.k8s.io/kueue/charts/kueue \
+          --version=0.14.1 \
+          --namespace kueue-system \
+          --create-namespace \
+          --wait --timeout 300s \
+          --kubeconfig "/home/mdxuser/mdxi-k8s-rke2/.kube/rke2.yaml" \
+          --set controllerManager.featureGates[0].name=TopologyAwareScheduling \
+          --set controllerManager.featureGates[0].enabled=true \
+          --set controllerManager.featureGates[1].name=LocalQueueMetrics \
+          --set controllerManager.featureGates[1].enabled=true
+
+    - name: Apply ServiceMonitor for existing Prometheus Operator
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "/home/mdxuser/mdxi-k8s-rke2/.kube/rke2.yaml" 
+        definition:
+          apiVersion: monitoring.coreos.com/v1
+          kind: ServiceMonitor
+          metadata:
+            name: kueue-servicemonitor
+            namespace: kueue-system
+            labels:
+              release: prometheus-operator
+              app: kueue
+          spec:
+            selector:
+              matchLabels:
+                control-plane: controller-manager
+            namespaceSelector:
+              matchNames:
+                - kueue-system
+            endpoints:
+              - port: metrics
+

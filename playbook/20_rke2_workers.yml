@@ -1,0 +1,32 @@
+---
+- hosts: masters
+  gather_facts: false
+  vars_files:
+    - ../group_vars/all.yml
+    - ../group_vars/vault.yml
+  tasks:
+    - name: Read RKE2 server token from master
+      tags: [token]
+      slurp:
+        src: /var/lib/rancher/rke2/server/token
+      register: server_token_raw
+      become: true
+
+    - name: Set fact (cluster token)
+      tags: [token]
+      set_fact:
+        cluster_token: "{{ server_token_raw.content | b64decode | trim }}"
+
+- hosts: workers
+  become: true
+  vars_files:
+    - ../group_vars/all.yml
+    - ../group_vars/vault.yml
+  serial: 5
+  vars:
+    kubeconfig_path: "{{ lookup('env','KUBECONFIG') | default(playbook_dir | dirname ~ '/.kube/rke2.yaml', true) }}"
+    rke2_server_ip: "{{ hostvars['mnode']['node_ip'] | default('10.14.23.161') }}"
+    rke2_token: "{{ hostvars[groups['masters'][0]].cluster_token | default(vault_rke2_token) }}"
+    force_rejoin: false
+  roles:
+    - { role: rke2_agent, tags: ["rke2","agent"] }
